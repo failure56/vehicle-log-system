@@ -1,0 +1,98 @@
+# -------------------------------------------------------------------
+# Python / Virtual Environment
+# -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+
+# -------------------------------------------------------------------
+# Jupyter / temp
+# -------------------------------------------------------------------
+.ipynb_checkpoints/
+*.ipynb~
+*.swp
+*.swo
+
+# -------------------------------------------------------------------
+# OS / Editor files
+# -------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# VSCode settings cache
+.vscode/
+.history/
+
+# -------------------------------------------------------------------
+# Docker / Compose
+# -------------------------------------------------------------------
+# Docker build cache
+docker-compose.override.yml
+*.pid
+
+# local Docker volumes
+db/data/
+db/*.duckdb
+*.db
+
+# -------------------------------------------------------------------
+# Project-specific (vehicle-log-system)
+# -------------------------------------------------------------------
+
+# Raw input data
+data/raw/
+data/sample/
+data/output/
+
+# Prepared unified timeseries
+prepared/*.parquet
+prepared/*.csv
+
+# Chunking data
+chunks/
+*.parquet
+
+# Embedding vectors
+embeddings/*.parquet
+embeddings/*.npy
+embeddings/*.npz
+embeddings/*.bin
+
+# Model weights (if added later)
+models/
+*.pt
+*.pth
+*.bin
+
+# -------------------------------------------------------------------
+# Logs
+# -------------------------------------------------------------------
+logs/
+*.log
+
+# -------------------------------------------------------------------
+# Environment & secrets (念のため)
+# -------------------------------------------------------------------
+.env
+*.env
+*.secret
+*.key
+*.token
+
+# -------------------------------------------------------------------
+# Backup / old files
+# -------------------------------------------------------------------
+*.bak
+*.old
+*.backup
