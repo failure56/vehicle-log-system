@@ -1,11 +1,21 @@
 import os
+import sys
 from openai import OpenAI
 
-# Initialize OpenAI client
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+# Validate required environment variables
+api_key = os.environ.get("OPENAI_API_KEY")
+issue_body = os.environ.get("ISSUE_BODY")
 
-# Get the issue body from environment variable
-issue_body = os.environ["ISSUE_BODY"]
+if not api_key:
+    print("Error: OPENAI_API_KEY environment variable is not set", file=sys.stderr)
+    sys.exit(1)
+
+if not issue_body:
+    print("Error: ISSUE_BODY environment variable is not set", file=sys.stderr)
+    sys.exit(1)
+
+# Initialize OpenAI client
+client = OpenAI(api_key=api_key)
 
 # Create the prompt for rewriting the issue
 prompt = f"""
@@ -31,11 +41,19 @@ Issue本文:
 >>>
 """
 
-res = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[
-        {"role": "user", "content": prompt}
-    ],
-)
-
-print(res.choices[0].message.content)
+try:
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+    )
+    
+    if not res.choices or len(res.choices) == 0:
+        print("Error: OpenAI API returned no response choices", file=sys.stderr)
+        sys.exit(1)
+    
+    print(res.choices[0].message.content)
+except Exception as e:
+    print(f"Error calling OpenAI API: {e}", file=sys.stderr)
+    sys.exit(1)
