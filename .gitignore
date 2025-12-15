@@ -96,3 +96,12 @@ logs/
 *.bak
 *.old
 *.backup
+
+# -------------------------------------------------------------------
+# Downloaded tools / temp files
+# -------------------------------------------------------------------
+actionlint
+actionlint*.tar.gz
+LICENSE.txt
+man/
+docs/
