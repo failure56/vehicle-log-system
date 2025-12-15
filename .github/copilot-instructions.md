@@ -47,7 +47,10 @@ vehicle-log-system/
 └── README.md
 ```
 
-**Note**: Some directories (`chunks/`, `prepared/`, `embeddings/`) are created by Docker Compose volume mounts at runtime. The `data/` directory contains persistent data storage.
+**Note**: 
+- Directories `chunks/`, `prepared/`, `embeddings/` at the root are Docker volume mount points created at runtime
+- The `data/` directory contains persistent data storage used by the code
+- **Important**: There's currently a mismatch - docker-compose mounts `./chunks` but the code uses `data/chunks`. The actual chunks are stored in `data/chunks/` as created by the scripts
 
 ## Development Workflow
 
@@ -70,7 +73,7 @@ vehicle-log-system/
 
 4. **Access points**:
    - API Server: http://localhost:8000
-   - DuckDB: Port 5432
+   - DuckDB: File-based access (no network port exposed)
 
 ### Testing
 
