@@ -13,6 +13,15 @@ This is a modular data pipeline for processing vehicle telemetry data (CAN bus, 
 - **Containerization**: Docker and Docker Compose
 - **Data Format**: Parquet files for efficient storage
 
+## Docker Services
+
+The system uses the following Docker Compose services:
+- **ingestion**: Data ingestion service (in preparation)
+- **chunker**: Time-series chunking service
+- **embedding**: Vector embedding service (in preparation)
+- **db**: DuckDB database server (container: `vehicle_db`)
+- **api**: FastAPI REST API server
+
 ## Project Structure
 
 ```
@@ -27,13 +36,18 @@ vehicle-log-system/
 ├── db/                     # DuckDB initialization
 │   ├── Dockerfile
 │   └── run_duckdb.py
-├── data/
-│   ├── chunks/             # Chunked data (Parquet)
+├── data/                   # Data storage directory
+│   ├── chunks/             # Chunked data (Parquet) - created by chunker
 │   ├── db/                 # DuckDB database files
 │   └── sample/             # Sample input data
+├── chunks/                 # Docker volume mount (created at runtime)
+├── prepared/               # Docker volume mount (created at runtime)
+├── embeddings/             # Docker volume mount (created at runtime)
 ├── docker-compose.yml      # Multi-service orchestration
 └── README.md
 ```
+
+**Note**: Some directories (`chunks/`, `prepared/`, `embeddings/`) are created by Docker Compose volume mounts at runtime. The `data/` directory contains persistent data storage.
 
 ## Development Workflow
 
@@ -41,12 +55,12 @@ vehicle-log-system/
 
 1. **Download sample data** (first time only):
    ```bash
-   docker compose run chunking python download_sample_data.py
+   docker compose run chunker python download_sample_data.py
    ```
 
 2. **Generate chunks**:
    ```bash
-   docker compose run chunking python make_chunks.py
+   docker compose run chunker python make_chunks.py
    ```
 
 3. **Start all services**:
