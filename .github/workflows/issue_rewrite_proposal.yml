@@ -44,6 +44,16 @@ jobs:
       # リポジトリをチェックアウト（rewrite スクリプトを実行するため）
       - uses: actions/checkout@v4
 
+      # Python 環境のセットアップ
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 必要な Python パッケージをインストール
+      - name: Install dependencies
+        run: pip install openai
+
       # Issue 本文を AI でリライト処理
       # 環境変数経由で ISSUE_BODY と OPENAI_API_KEY を渡す
       - name: Run rewrite
