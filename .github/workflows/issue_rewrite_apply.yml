@@ -43,30 +43,30 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            # 対象 Issue のすべてのコメントを取得（新しい順に並び替え）
+            // 対象 Issue のすべてのコメントを取得（新しい順に並び替え）
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number
             })
 
-            # "## 概要" という見出しを含むコメント（リライト提案）を検索
-            # reverse() で最新のコメントから順に確認
+            // "## 概要" という見出しを含むコメント（リライト提案）を検索
+            // reverse() で最新のコメントから順に確認
             const proposal = comments.data.reverse()
               .find(c => c.body.includes("## 概要"))
 
-            # リライト提案が見つからない場合はエラー終了
+            // リライト提案が見つからない場合はエラー終了
             if (!proposal) {
               core.setFailed("Rewrite proposal not found")
               return
             }
 
-            # 提案コメントから "### 🤖 Issueリライト案（提案）" という見出しより前の部分を削除
-            # つまり、提案の本体部分のみを抽出
+            // 提案コメントから "### 🤖 Issueリライト案（提案）" という見出しより前の部分を削除
+            // つまり、提案の本体部分のみを抽出
             const body = proposal.body
               .replace(/^### 🤖 Issueリライト案（提案）[\\s\\S]*?\\n\\n/, "")
 
-            # 抽出した内容で Issue 本文を更新
+            // 抽出した内容で Issue 本文を更新
             await github.rest.issues.update({
               owner: context.repo.owner,
               repo: context.repo.repo,

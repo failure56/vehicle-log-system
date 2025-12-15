@@ -56,9 +56,11 @@ jobs:
           # rewrite_issue.py を実行してリライト結果を取得
           RESULT=$(python scripts/rewrite_issue.py)
           # 出力を GitHub Actions の output に設定（複数行対応）
-          echo "TEXT<<EOF" >> $GITHUB_OUTPUT
-          echo "$RESULT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "TEXT<<EOF"
+            echo "$RESULT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # AI によるリライト提案をコメントで Issue に投稿
       # ユーザーが `/apply-rewrite` コマンドで確定可能な形式
@@ -66,16 +68,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            # Issue コメントを作成
+            // Issue コメントを作成
+            const proposalText = `${{ steps.rewrite.outputs.TEXT }}`;
+            const body = "### 🤖 Issueリライト案（提案）\n\n" +
+              "※ 元Issueは変更していません  \n" +
+              "問題なければ `/apply-rewrite` とコメントしてください。\n\n" +
+              proposalText;
+            
             github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              # コメント本文：提案見出し + 説明 + リライト結果
-              body: `### 🤖 Issueリライト案（提案）
-
-※ 元Issueは変更していません  
-問題なければ \`/apply-rewrite\` とコメントしてください。
-
-${{ steps.rewrite.outputs.TEXT }}`
+              body: body
             })
