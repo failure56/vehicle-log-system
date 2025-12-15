@@ -49,8 +49,8 @@ vehicle-log-system/
 
 **Note**: 
 - Directories `chunks/`, `prepared/`, `embeddings/` at the root are Docker volume mount points created at runtime
-- The `data/` directory contains persistent data storage used by the code
-- **Important**: There's currently a mismatch - docker-compose mounts `./chunks` but the code uses `data/chunks`. The actual chunks are stored in `data/chunks/` as created by the scripts
+- The `data/` directory contains persistent data storage
+- **Known Issue**: The `chunker` service mounts `./chunks:/app/chunks` but the code (`make_chunks.py`) writes to `data/chunks/`. The `ingestion` service has `./data:/app/data` mounted. This configuration mismatch needs to be resolved for proper operation
 
 ## Development Workflow
 
