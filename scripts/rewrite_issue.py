@@ -31,9 +31,11 @@ Issue本文:
 >>>
 """
 
-res = client.responses.create(
-    model="gpt-4.1-mini",
-    input=prompt,
+res = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[
+        {"role": "user", "content": prompt}
+    ],
 )
 
-print(res.output_text)
+print(res.choices[0].message.content)

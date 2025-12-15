@@ -1,63 +1,34 @@
 services:
-  ingestion:
-    build:
-      context: ./ingestion
-      dockerfile: Dockerfile.ingestion
-    container_name: ingestion
-    volumes:
-      - ./data:/app/data
-      - ./prepared:/app/prepared
-    command: ["true"]
-    # ingestionは必要時に "docker compose run ingestion python prepare_data.py" のように実行する
-
-  chunker:
+  chunking:
     build:
       context: ./chunking
-      dockerfile: Dockerfile.chunker
-    container_name: chunker
-    depends_on:
-      - ingestion
+      dockerfile: Dockerfile
+    container_name: chunking
     volumes:
-      - ./prepared:/app/prepared
-      - ./chunks:/app/chunks
+      - ./data:/app/data
     command: ["true"]
-    # chunkerも必要時に "docker compose run chunker python make_chunks.py" で実行
-
-  embedding:
-    build:
-      context: ./embeddings
-      dockerfile: Dockerfile.embedding
-    container_name: embedding
-    depends_on:
-      - chunker
-    volumes:
-      - ./chunks:/app/chunks
-      - ./embeddings:/app/embeddings
-    command: ["true"]
+    # chunkerは必要時に "docker compose run chunking python make_chunks.py" で実行
 
   db:
     build:
       context: ./db
-      dockerfile: Dockerfile.db
+      dockerfile: Dockerfile
     container_name: vehicle_db
     volumes:
-      - ./embeddings:/app/embeddings
-      - ./db/data:/app/db_data
+      - ./data:/app/data
     command: python run_duckdb.py
 
   api:
     build:
       context: ./api
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile
     container_name: api
     depends_on:
       - db
     ports:
       - "8000:8000"
     volumes:
-      - ./embeddings:/app/embeddings
-      - ./chunks:/app/chunks
-      - ./prepared:/app/prepared
+      - ./data:/app/data
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
 
