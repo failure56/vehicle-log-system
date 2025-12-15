@@ -65,11 +65,11 @@ jobs:
 
             // 提案コメントから "### 🤖 Issueリライト案（提案）" という見出しと説明文を削除
             // つまり、提案の本体部分のみを抽出
-            let body = proposal.body
+            const bodyWithoutHeader = proposal.body
               .replace(/^### 🤖 Issueリライト案（提案）[\s\S]*?\n\n/, "")
             
             // 説明文を削除
-            body = body.replace(/※ 元Issueは変更していません[\s\S]*?とコメントしてください。\n\n/, "")
+            const body = bodyWithoutHeader.replace(/※ 元Issueは変更していません[\s\S]*?とコメントしてください。\n\n/, "")
 
             // 抽出した内容で Issue 本文を更新
             await github.rest.issues.update({

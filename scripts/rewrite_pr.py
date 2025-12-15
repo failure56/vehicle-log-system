@@ -18,6 +18,9 @@ if not pr_body:
 client = OpenAI(api_key=api_key)
 
 # Create the prompt for rewriting the PR description
+# Note: PR prompt format differs from Issue prompt because PRs focus on
+# implementation details (変更内容, テスト, 注意点) while Issues focus on
+# requirements (要件, 非要件, 受け入れ条件)
 prompt = f"""
 以下は人間が手動で作成した GitHub Pull Request の説明です。
 内容を変更せず、レビュアーが理解しやすい形にリライトしてください。
