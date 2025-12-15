@@ -1,51 +1,52 @@
 # =============================================================================
-# Issue Rewrite Apply Workflow
+# Pull Request Rewrite Apply Workflow
 # =============================================================================
 #
 # このワークフローは以下を自動実行します：
-# - Issue コメント内の `/apply-rewrite` コマンドを検出
-# - Issue のリライト提案を元の Issue 本文に適用
-# - AI によって提案された新しい Issue 内容に更新
+# - PR コメント内の `/apply-rewrite` コマンドを検出
+# - PR のリライト提案を元の PR 説明に適用
+# - AI によって提案された新しい PR 内容に更新
 # - 提案コメントを削除
 #
 # トリガー条件：
-# - Issue コメントが作成された時に自動検出
+# - Issue コメントが作成された時に自動検出（PR のコメントも issue_comment イベントで検出される）
 # - コメント内に `/apply-rewrite` コマンドがある場合に実行
 #
 # 使用方法：
-# 1. Issue にリライト提案コメントが投稿される
-# 2. Issue コメント欄に `/apply-rewrite` とコメント
-# 3. このワークフローが自動実行され、Issue 本文が更新される
+# 1. PR にリライト提案コメントが投稿される
+# 2. PR コメント欄に `/apply-rewrite` とコメント
+# 3. このワークフローが自動実行され、PR 説明が更新される
 # 4. 提案コメントが削除される
 # =============================================================================
 
-name: Apply Issue Rewrite
+name: Apply PR Rewrite
 
 on:
-  # Issue コメントイベントをトリガーに
+  # Issue コメントイベントをトリガーに（PR のコメントも含む）
   issue_comment:
     types: [created]
 
-# GitHub API で Issue を更新するための権限を付与
+# GitHub API で PR を更新し、コメントを削除するための権限を付与
 permissions:
+  pull-requests: write
   issues: write
 
 jobs:
   # ===========================================================================
   # ジョブ: apply
-  # 目的: Issue コメントの `/apply-rewrite` コマンドを検出し、リライト提案を適用
+  # 目的: PR コメントの `/apply-rewrite` コマンドを検出し、リライト提案を適用
   # ===========================================================================
   apply:
-    # `/apply-rewrite` コマンドがコメント内に含まれ、かつ Issue に対するコメントの場合のみ実行
-    if: contains(github.event.comment.body, '/apply-rewrite') && !github.event.issue.pull_request
+    # `/apply-rewrite` コマンドがコメント内に含まれ、かつ PR に対するコメントの場合のみ実行
+    if: contains(github.event.comment.body, '/apply-rewrite') && github.event.issue.pull_request
     runs-on: ubuntu-latest
     steps:
-      # Issue コメントからリライト提案を取得し、Issue 本文に適用
+      # PR コメントからリライト提案を取得し、PR 説明に適用
       - name: Apply rewrite
         uses: actions/github-script@v7
         with:
           script: |
-            // 対象 Issue のすべてのコメントを取得（新しい順に並び替え）
+            // 対象 PR のすべてのコメントを取得（新しい順に並び替え）
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -63,19 +64,19 @@ jobs:
               return
             }
 
-            // 提案コメントから "### 🤖 Issueリライト案（提案）" という見出しと説明文を削除
+            // 提案コメントから "### 🤖 PRリライト案（提案）" という見出しと説明文を削除
             // つまり、提案の本体部分のみを抽出
             let body = proposal.body
-              .replace(/^### 🤖 Issueリライト案（提案）[\s\S]*?\n\n/, "")
+              .replace(/^### 🤖 PRリライト案（提案）[\s\S]*?\n\n/, "")
             
             // 説明文を削除
-            body = body.replace(/※ 元Issueは変更していません[\s\S]*?とコメントしてください。\n\n/, "")
+            body = body.replace(/※ 元PRは変更していません[\s\S]*?とコメントしてください。\n\n/, "")
 
-            // 抽出した内容で Issue 本文を更新
-            await github.rest.issues.update({
+            // 抽出した内容で PR 説明を更新
+            await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              pull_number: context.issue.number,
               body
             })
 

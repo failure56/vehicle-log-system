@@ -1,0 +1,94 @@
+# =============================================================================
+# Pull Request Rewrite Proposal Workflow
+# =============================================================================
+#
+# このワークフローは以下を自動実行します：
+# - 新規 Pull Request を検出
+# - AI（OpenAI）を使用して PR の説明をリライト・改善
+# - リライト提案をコメントで投稿
+# - ユーザーが `/apply-rewrite` コマンドで適用を指示可能
+#
+# トリガー条件：
+# - 新しい Pull Request が開かれた時に自動実行
+#
+# 前提条件：
+# - GitHub Secrets に OPENAI_API_KEY が設定されている必要があります
+# - scripts/rewrite_pr.py がリポジトリに存在
+#
+# 機能：
+# 1. PR 説明を AI に送信してリライト案を生成
+# 2. 提案をコメント形式で PR に投稿
+# 3. ユーザーが `/apply-rewrite` コマンドで提案を確定可能
+# =============================================================================
+
+name: Propose PR Rewrite
+
+on:
+  # Pull Request が新規作成された時にトリガー
+  pull_request:
+    types: [opened]
+
+# GitHub API で PR コメントを作成し、リポジトリのコードにアクセスするための権限を付与
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ===========================================================================
+  # ジョブ: propose
+  # 目的: 新規 PR を AI でリライトし、提案コメントを投稿
+  # ===========================================================================
+  propose:
+    runs-on: ubuntu-latest
+    steps:
+      # リポジトリをチェックアウト（rewrite スクリプトを実行するため）
+      - uses: actions/checkout@v4
+
+      # Python 環境のセットアップ
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 必要な Python パッケージをインストール
+      - name: Install dependencies
+        run: pip install openai
+
+      # PR 説明を AI でリライト処理
+      # 環境変数経由で PR_BODY と OPENAI_API_KEY を渡す
+      - name: Run rewrite
+        id: rewrite
+        env:
+          # 新規作成された PR の説明を環境変数に設定
+          PR_BODY: ${{ github.event.pull_request.body }}
+          # OpenAI API キーを環境変数に設定
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          # rewrite_pr.py を実行してリライト結果を取得
+          RESULT=$(python scripts/rewrite_pr.py)
+          # 出力を GitHub Actions の output に設定（複数行対応）
+          {
+            echo "TEXT<<EOF"
+            echo "$RESULT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # AI によるリライト提案をコメントで PR に投稿
+      # ユーザーが `/apply-rewrite` コマンドで確定可能な形式
+      - name: Post proposal
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // PR コメントを作成
+            const proposalText = `${{ steps.rewrite.outputs.TEXT }}`;
+            const body = "### 🤖 PRリライト案（提案）\n\n" +
+              "※ 元PRは変更していません  \n" +
+              "問題なければ `/apply-rewrite` とコメントしてください。\n\n" +
+              proposalText;
+            
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            })
