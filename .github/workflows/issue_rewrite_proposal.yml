@@ -28,8 +28,9 @@ on:
   issues:
     types: [opened]
 
-# GitHub API で Issue コメントを作成するための権限を付与
+# GitHub API で Issue コメントを作成し、リポジトリのコードにアクセスするための権限を付与
 permissions:
+  contents: read
   issues: write
 
 jobs:
