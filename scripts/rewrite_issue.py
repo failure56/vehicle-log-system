@@ -21,9 +21,14 @@ client = OpenAI(api_key=api_key)
 
 # Create the prompt for rewriting the issue
 # If body is empty, infer from title
-if issue_body:
-    issue_content = f"Issue題名: {issue_title}\n\nIssue本文:\n<<<\n{issue_body}\n>>>"
+if issue_body.strip():
+    # Both title and body are present
+    if issue_title.strip():
+        issue_content = f"Issue題名: {issue_title}\n\nIssue本文:\n<<<\n{issue_body}\n>>>"
+    else:
+        issue_content = f"Issue本文:\n<<<\n{issue_body}\n>>>"
 else:
+    # Only title is present
     issue_content = f"Issue題名: {issue_title}\n\n※本文が記載されていないため、題名から内容を類推してください。"
 
 prompt = f"""
