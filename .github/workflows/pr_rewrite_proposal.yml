@@ -16,7 +16,8 @@
 # - scripts/rewrite_pr.py がリポジトリに存在
 #
 # 機能：
-# 1. PR 説明を AI に送信してリライト案を生成
+# 1. PR 題名と説明を AI に送信してリライト案を生成
+#    - 説明が空の場合は題名から内容を類推
 # 2. 提案をコメント形式で PR に投稿
 # 3. ユーザーが `/apply-rewrite` コマンドで提案を確定可能
 # =============================================================================
@@ -54,11 +55,13 @@ jobs:
       - name: Install dependencies
         run: pip install openai
 
-      # PR 説明を AI でリライト処理
-      # 環境変数経由で PR_BODY と OPENAI_API_KEY を渡す
+      # PR 題名と説明を AI でリライト処理
+      # 環境変数経由で PR_TITLE, PR_BODY, OPENAI_API_KEY を渡す
       - name: Run rewrite
         id: rewrite
         env:
+          # 新規作成された PR の題名を環境変数に設定
+          PR_TITLE: ${{ github.event.pull_request.title }}
           # 新規作成された PR の説明を環境変数に設定
           PR_BODY: ${{ github.event.pull_request.body }}
           # OpenAI API キーを環境変数に設定

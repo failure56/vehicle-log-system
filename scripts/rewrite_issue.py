@@ -11,16 +11,16 @@ if not api_key:
     print("Error: OPENAI_API_KEY environment variable is not set", file=sys.stderr)
     sys.exit(1)
 
-# Check if we have at least title or body
-if not issue_title and not issue_body:
-    print("Error: At least one of ISSUE_TITLE or ISSUE_BODY must be set", file=sys.stderr)
+# Check if we have at least title or body (after stripping whitespace)
+if not issue_title.strip() and not issue_body.strip():
+    print("Error: At least one of ISSUE_TITLE or ISSUE_BODY must contain non-whitespace content", file=sys.stderr)
     sys.exit(1)
 
 # Initialize OpenAI client
 client = OpenAI(api_key=api_key)
 
 # Create the prompt for rewriting the issue
-# If body is empty, infer from title
+# Handle three cases: 1) title+body, 2) body only, 3) title only
 if issue_body.strip():
     # Both title and body are present
     if issue_title.strip():
