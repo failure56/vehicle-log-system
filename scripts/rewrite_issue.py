@@ -4,20 +4,33 @@ from openai import OpenAI
 
 # Validate required environment variables
 api_key = os.environ.get("OPENAI_API_KEY")
-issue_body = os.environ.get("ISSUE_BODY")
+issue_title = os.environ.get("ISSUE_TITLE", "")
+issue_body = os.environ.get("ISSUE_BODY", "")
 
 if not api_key:
     print("Error: OPENAI_API_KEY environment variable is not set", file=sys.stderr)
     sys.exit(1)
 
-if not issue_body:
-    print("Error: ISSUE_BODY environment variable is not set", file=sys.stderr)
+# Check if we have at least title or body (after stripping whitespace)
+if not issue_title.strip() and not issue_body.strip():
+    print("Error: At least one of ISSUE_TITLE or ISSUE_BODY must contain non-whitespace content", file=sys.stderr)
     sys.exit(1)
 
 # Initialize OpenAI client
 client = OpenAI(api_key=api_key)
 
 # Create the prompt for rewriting the issue
+# Handle three cases: 1) title+body, 2) body only, 3) title only
+if issue_body.strip():
+    # Both title and body are present
+    if issue_title.strip():
+        issue_content = f"Issue題名: {issue_title}\n\nIssue本文:\n<<<\n{issue_body}\n>>>"
+    else:
+        issue_content = f"Issue本文:\n<<<\n{issue_body}\n>>>"
+else:
+    # Only title is present
+    issue_content = f"Issue題名: {issue_title}\n\n※本文が記載されていないため、題名から内容を類推してください。"
+
 prompt = f"""
 以下は人間が手動で作成した GitHub Issue です。
 内容を変更せず、実装者が作業しやすい形にリライトしてください。
@@ -35,10 +48,7 @@ prompt = f"""
 ## 受け入れ条件
 ## 未決事項
 
-Issue本文:
-<<<
-{issue_body}
->>>
+{issue_content}
 """
 
 try:
