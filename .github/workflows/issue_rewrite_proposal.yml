@@ -58,8 +58,8 @@ jobs:
       # 環境変数経由で ISSUE_BODY と OPENAI_API_KEY を渡す
       - name: Run rewrite
         id: rewrite
-        # Issue 本文が空の場合はスキップ
-        if: ${{ github.event.issue.body != '' }}
+        # Issue 本文が空または null の場合はスキップ
+        if: ${{ github.event.issue.body != null && github.event.issue.body != '' }}
         env:
           # 新規開設された Issue の本文を環境変数に設定
           ISSUE_BODY: ${{ github.event.issue.body }}
@@ -78,8 +78,8 @@ jobs:
       # AI によるリライト提案をコメントで Issue に投稿
       # ユーザーが `/apply-rewrite` コマンドで確定可能な形式
       - name: Post proposal
-        # Issue 本文が空の場合はスキップ
-        if: ${{ github.event.issue.body != '' }}
+        # Issue 本文が空または null の場合はスキップ
+        if: ${{ github.event.issue.body != null && github.event.issue.body != '' }}
         uses: actions/github-script@v7
         with:
           script: |
