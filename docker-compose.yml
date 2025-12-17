@@ -48,7 +48,7 @@ services:
   api:
     build:
       context: ./api
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile
     container_name: api
     depends_on:
       - db
@@ -58,6 +58,8 @@ services:
       - ./embeddings:/app/embeddings
       - ./chunks:/app/chunks
       - ./prepared:/app/prepared
+      - ./charging:/app/charging
+      - ./data:/app/data
     command: uvicorn main:app --host 0.0.0.0 --port 8000
 
 

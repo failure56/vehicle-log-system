@@ -22,6 +22,10 @@ Vehicle Log System は以下の処理を段階的に行います：
    生成データを DuckDB に保存し、  
    API から検索やクエリを実行可能。
 
+5. **⚡ 充電規格自動判別 (NEW!)**  
+   車両の充電電圧・電流データから充電規格を自動判別。  
+   CHAdeMO、CCS、Type2、Tesla Supercharger、GB/T に対応。
+
 ---
 
 ## 📁 ディレクトリ構成
@@ -31,6 +35,9 @@ vehicle-log-system/
 ├── api/                    # FastAPI サーバー
 │   ├── Dockerfile
 │   └── main.py
+├── charging/               # 充電規格自動判別
+│   ├── detector.py
+│   └── __init__.py
 ├── chunking/               # チャンク生成処理
 │   ├── Dockerfile
 │   ├── make_chunks.py
@@ -103,6 +110,44 @@ docker compose up
 - **DB**: DuckDB（`data/db/vehicle_logs.duckdb`）
 - **API**: FastAPI サーバー（`api/main.py`）
 
+### 5. ⚡ 充電規格自動判別
+- **実装**: `charging/detector.py`
+- **機能**: 電圧・電流データから充電規格を自動判別
+- **対応規格**: 
+  - CHAdeMO（日本の急速充電規格）
+  - CCS Combo 1 / 2（北米・欧州の急速充電規格）
+  - Type 2 / IEC 62196-2（欧州の普通充電規格）
+  - Tesla Supercharger（Tesla専用急速充電）
+  - GB/T（中国の充電規格）
+- **API エンドポイント**:
+  - `POST /charging/detect` - 電圧・電流から判別
+  - `POST /charging/detect-from-can` - CANバスデータから判別
+  - `GET /charging/standards` - 対応充電規格一覧
+
+#### 使用例
+
+```python
+# Pythonから直接使用
+from charging.detector import ChargingProfile, ChargingStandardDetector
+
+profile = ChargingProfile(voltage=400, current=100, power=40)
+detector = ChargingStandardDetector()
+result = detector.detect(profile)
+
+print(f"検出: {result.standard.value}")
+print(f"信頼度: {result.confidence:.1%}")
+```
+
+```bash
+# APIを使用（curlコマンド）
+curl -X POST http://localhost:8000/charging/detect \
+  -H "Content-Type: application/json" \
+  -d '{"voltage": 400, "current": 100}'
+
+# 対応充電規格一覧を取得
+curl http://localhost:8000/charging/standards
+```
+
 ---
 
 ## 🛠️ トラブルシューティング
@@ -128,6 +173,7 @@ docker compose up
 
 ## 🗺️ ロードマップ（今後の予定）
 
+- [x] ⚡ 充電規格自動判別機能（完了）
 - [ ] CAN 生ログ ingestion の追加
 - [ ] 高解像度 GPS 補間（Kalman Filter）
 - [ ] 周波数成分特徴量（FFT）
