@@ -47,8 +47,8 @@ class ChargingStandardDetector:
     STANDARD_PROFILES = {
         ChargingStandard.CHADEMO: {
             "voltage_range": (50, 500),  # V
-            "max_current": 125,  # A (CHAdeMO 1.0: 62.5A, 2.0: 200A)
-            "max_power": 62.5,  # kW (CHAdeMO 1.0: 62.5kW, 2.0: 400kW)
+            "max_current": 200,  # A (CHAdeMO 1.0: 62.5A, 2.0: 200A, 3.0: 400A)
+            "max_power": 400,  # kW (CHAdeMO 1.0: 62.5kW, 2.0: 400kW)
             "protocol": "CAN",
         },
         ChargingStandard.CCS_COMBO1: {
@@ -147,9 +147,14 @@ class ChargingStandardDetector:
         voltage_weight = 0.4
         max_score += voltage_weight
         if spec["voltage_range"][0] <= profile.voltage <= spec["voltage_range"][1]:
-            voltage_fit = 1.0 - abs(
-                profile.voltage - (spec["voltage_range"][0] + spec["voltage_range"][1]) / 2
-            ) / (spec["voltage_range"][1] - spec["voltage_range"][0])
+            voltage_range_width = spec["voltage_range"][1] - spec["voltage_range"][0]
+            if voltage_range_width > 0:
+                voltage_fit = 1.0 - abs(
+                    profile.voltage - (spec["voltage_range"][0] + spec["voltage_range"][1]) / 2
+                ) / voltage_range_width
+            else:
+                # If voltage_range is a single value, check for exact match
+                voltage_fit = 1.0 if profile.voltage == spec["voltage_range"][0] else 0.0
             score += voltage_fit * voltage_weight
         
         # 電流のチェック (重み: 0.3)

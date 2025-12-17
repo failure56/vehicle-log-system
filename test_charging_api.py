@@ -5,7 +5,12 @@ Test script for charging standard detection API
 """
 
 import sys
-sys.path.append('.')
+import os
+
+# Add current directory to path if not already present
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 from charging.detector import (
     ChargingStandardDetector,
