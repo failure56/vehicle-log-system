@@ -92,12 +92,16 @@ jobs:
     
     - name: Install test dependencies
       run: |
-        pip install -r tests/requirements.txt
+        pip install --trusted-host pypi.org --trusted-host files.pythonhosted.org -r tests/requirements.txt
+    
+    - name: Debug - Check database
+      run: |
+        ls -la data/db/
+        file data/db/vehicle_logs.duckdb || true
+        pwd
     
     - name: Run database tests
       run: |
-        ls -la data/db/ || echo "data/db directory doesn't exist"
-        pwd
         pytest tests/test_db.py -v
     
     - name: Run chunking tests
