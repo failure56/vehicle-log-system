@@ -15,24 +15,30 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    # リポジトリのコードをチェックアウト
     - name: Checkout code
       uses: actions/checkout@v4
     
+    # Docker Buildxをセットアップ
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     
+    # データ格納用ディレクトリを作成
     - name: Create data directories
       run: |
         mkdir -p data/db data/chunks data/sample
     
+    # 全Dockerサービスをビルド
     - name: Build Docker services
       run: |
         docker compose build
     
+    # DuckDBデータベースを初期化
     - name: Initialize database
       run: |
         docker compose run --rm db python run_duckdb.py
     
+    # テスト用のデータを生成してデータベースに挿入
     - name: Create test data
       run: |
         docker compose run --rm chunker python -c "
@@ -40,7 +46,7 @@ jobs:
         import numpy as np
         import duckdb
         
-        # Create test GPS data with realistic timestamps
+        # テスト用GPS データを現実的なタイムスタンプで作成
         np.random.seed(42)
         n_points = 1000
         # Start from a realistic timestamp (2024-01-01)
@@ -115,14 +121,21 @@ jobs:
     
     - name: Check API health
       run: |
+        API_READY=0
         for i in {1..10}; do
-          if curl -s http://localhost:8000/chunks > /dev/null; then
+          if curl -sSf http://localhost:8000/chunks > /dev/null; then
             echo "API is ready"
+            API_READY=1
             break
           fi
           echo "Waiting for API... ($i/10)"
           sleep 3
         done
+        # APIが起動しなかった場合は明示的にエラーで終了
+        if [ "$API_READY" -ne 1 ]; then
+          echo "ERROR: API did not become ready after 10 attempts"
+          exit 1
+        fi
     
     - name: Run API tests
       run: |

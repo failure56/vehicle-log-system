@@ -1,13 +1,19 @@
 #!/bin/bash
-# Integration test script for vehicle log system
+# 車両ログシステムの統合テストスクリプト
 
-set -e  # Exit on any error
+set -e  # エラーが発生したら即座に終了
 
 echo "=========================================="
 echo "Vehicle Log System Integration Test"
 echo "=========================================="
 
-# Clean up any previous test data
+# 安全性チェック: プロジェクトルートから実行されているか確認
+if [ ! -f "docker-compose.yml" ]; then
+    echo "ERROR: docker-compose.yml not found. This script must be run from the project root directory."
+    exit 1
+fi
+
+# 以前のテストデータをクリーンアップ
 echo ""
 echo "Step 1: Cleaning up previous test data..."
 rm -rf data/db data/chunks

@@ -1,4 +1,4 @@
-"""Tests for FastAPI endpoints."""
+"""FastAPI エンドポイントのテスト。"""
 import pytest
 import requests
 import time
@@ -8,7 +8,14 @@ API_BASE_URL = "http://localhost:8000"
 
 
 def wait_for_api(timeout=30):
-    """Wait for API to be ready."""
+    """APIが起動するまで待機する。
+    
+    Args:
+        timeout: 最大待機時間（秒）
+        
+    Returns:
+        bool: APIが起動した場合True、タイムアウトした場合False
+    """
     start = time.time()
     while time.time() - start < timeout:
         try:
@@ -21,12 +28,12 @@ def wait_for_api(timeout=30):
 
 
 def test_api_is_running():
-    """Test that API server is running."""
+    """APIサーバーが起動しているかテストする。"""
     assert wait_for_api(), "API did not start within timeout period"
 
 
 def test_list_chunks_endpoint():
-    """Test GET /chunks endpoint."""
+    """GET /chunks エンドポイントをテストする。"""
     if not wait_for_api():
         pytest.skip("API not available")
     
@@ -41,25 +48,25 @@ def test_list_chunks_endpoint():
 
 
 def test_get_chunk_endpoint_valid():
-    """Test GET /chunk/{cid} endpoint with valid chunk."""
+    """GET /chunk/{cid} エンドポイントを有効なチャンクIDでテストする。"""
     if not wait_for_api():
         pytest.skip("API not available")
     
-    # First get list of chunks
+    # まずチャンクのリストを取得
     response = requests.get(f"{API_BASE_URL}/chunks")
     data = response.json()
     
     if len(data["chunks"]) == 0:
         pytest.skip("No chunks available for testing")
     
-    # Test getting first chunk (chunk_0)
+    # 最初のチャンク（chunk_0）を取得してテスト
     response = requests.get(f"{API_BASE_URL}/chunk/0")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
     
     chunk_data = response.json()
     assert isinstance(chunk_data, dict), "Chunk data should be a dictionary"
     
-    # Check for expected keys (column names from parquet)
+    # Parquetファイルから期待されるキー（カラム名）を確認
     expected_keys = ["ts", "vehicle_id", "sec"]
     for key in expected_keys:
         assert key in chunk_data, f"Expected key '{key}' in chunk data"
@@ -68,11 +75,11 @@ def test_get_chunk_endpoint_valid():
 
 
 def test_get_chunk_endpoint_invalid():
-    """Test GET /chunk/{cid} endpoint with invalid chunk ID."""
+    """GET /chunk/{cid} エンドポイントを無効なチャンクIDでテストする。"""
     if not wait_for_api():
         pytest.skip("API not available")
     
-    # Try to get a chunk that doesn't exist
+    # 存在しないチャンクを取得しようとする
     response = requests.get(f"{API_BASE_URL}/chunk/99999")
     assert response.status_code == 200, "API should return 200 even for not found"
     
