@@ -96,6 +96,8 @@ jobs:
     
     - name: Run database tests
       run: |
+        ls -la data/db/ || echo "data/db directory doesn't exist"
+        pwd
         pytest tests/test_db.py -v
     
     - name: Run chunking tests
