@@ -1,0 +1,139 @@
+name: Vehicle Log System Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Create data directories
+      run: |
+        mkdir -p data/db data/chunks data/sample
+    
+    - name: Build Docker services
+      run: |
+        docker compose build
+    
+    - name: Initialize database
+      run: |
+        docker compose run --rm db python run_duckdb.py
+    
+    - name: Create test data
+      run: |
+        docker compose run --rm chunker python -c "
+        import pandas as pd
+        import numpy as np
+        import duckdb
+        
+        # Create test GPS data
+        np.random.seed(42)
+        n_points = 1000
+        timestamps = np.arange(n_points) * 1e9  # nanoseconds
+        
+        gps_data = pd.DataFrame({
+            'ts': pd.to_datetime(timestamps, unit='ns'),
+            'vehicle_id': ['vehicle_001'] * n_points,
+            'lat': 35.6762 + np.random.randn(n_points) * 0.01,
+            'lon': 139.6503 + np.random.randn(n_points) * 0.01,
+            'speed': np.abs(np.random.randn(n_points) * 20 + 50),
+            'heading': np.random.rand(n_points) * 360
+        })
+        
+        can_data = pd.DataFrame({
+            'ts': pd.to_datetime(timestamps[:500], unit='ns'),
+            'vehicle_id': ['vehicle_001'] * 500,
+            'signal': ['engine_rpm', 'vehicle_speed'] * 250,
+            'value': np.random.rand(500) * 100
+        })
+        
+        # Insert into DuckDB
+        con = duckdb.connect('data/db/vehicle_logs.duckdb')
+        con.execute('INSERT INTO gps_log SELECT * FROM gps_data')
+        con.execute('INSERT INTO can_log SELECT * FROM can_data')
+        con.close()
+        
+        print('Test data created successfully')
+        "
+    
+    - name: Run chunking
+      run: |
+        docker compose run --rm chunker python make_chunks.py
+    
+    - name: Verify chunks created
+      run: |
+        CHUNK_COUNT=$(ls -1 data/chunks/chunk_*.parquet 2>/dev/null | wc -l || echo "0")
+        echo "Created $CHUNK_COUNT chunks"
+        if [ "$CHUNK_COUNT" -eq 0 ]; then
+          echo "ERROR: No chunks were created!"
+          exit 1
+        fi
+    
+    - name: Set up Python for tests
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install test dependencies
+      run: |
+        pip install -r tests/requirements.txt
+    
+    - name: Run database tests
+      run: |
+        cd /home/runner/work/vehicle-log-system/vehicle-log-system
+        pytest tests/test_db.py -v
+    
+    - name: Run chunking tests
+      run: |
+        pytest tests/test_chunking.py -v
+    
+    - name: Start API service
+      run: |
+        docker compose up -d api
+        sleep 5
+    
+    - name: Check API health
+      run: |
+        for i in {1..10}; do
+          if curl -s http://localhost:8000/chunks > /dev/null; then
+            echo "API is ready"
+            break
+          fi
+          echo "Waiting for API... ($i/10)"
+          sleep 3
+        done
+    
+    - name: Run API tests
+      run: |
+        pytest tests/test_api.py -v
+    
+    - name: Show API logs on failure
+      if: failure()
+      run: |
+        docker compose logs api
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        docker compose down -v
+    
+    - name: Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-data
+        path: |
+          data/chunks/
+          data/db/
+        retention-days: 7
