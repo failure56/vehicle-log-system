@@ -37,10 +37,12 @@ jobs:
         import numpy as np
         import duckdb
         
-        # Create test GPS data
+        # Create test GPS data with realistic timestamps
         np.random.seed(42)
         n_points = 1000
-        timestamps = np.arange(n_points) * 1e9  # nanoseconds
+        # Start from a realistic timestamp (2024-01-01)
+        base_timestamp = pd.Timestamp('2024-01-01 12:00:00').value  # in nanoseconds
+        timestamps = base_timestamp + np.arange(n_points) * 1e9  # Add 1 second per point
         
         gps_data = pd.DataFrame({
             'ts': pd.to_datetime(timestamps, unit='ns'),

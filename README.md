@@ -105,6 +105,41 @@ docker compose up
 
 ---
 
+## ✅ テスト
+
+### GitHub Actions での自動テスト
+プルリクエストやプッシュ時に、GitHub Actions で自動的にテストが実行されます。
+
+### ローカルでのテスト実行
+
+**統合テストの実行:**
+```bash
+./tests/integration_test.sh
+```
+
+**個別のユニットテスト:**
+```bash
+# テスト依存関係のインストール
+pip install -r tests/requirements.txt
+
+# データベーステスト
+pytest tests/test_db.py -v
+
+# チャンキングテスト
+pytest tests/test_chunking.py -v
+
+# API テスト（API サービスが起動している必要があります）
+docker compose up -d api
+pytest tests/test_api.py -v
+```
+
+### テストの内容
+- **データベース初期化**: テーブル作成とスキーマ検証
+- **チャンク生成**: 時系列データの分割とファイル形式の検証
+- **API エンドポイント**: REST API の動作確認
+
+---
+
 ## 🛠️ トラブルシューティング
 
 | 問題 | 解決方法 |

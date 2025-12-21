@@ -10,7 +10,8 @@ def load_logs():
     return can, gps
 
 def make_chunks(gps_df):
-    gps_df["sec"] = gps_df["ts"].astype("int64") // 10**9
+    # Convert timestamp to seconds (DuckDB returns datetime64[us], so divide by 10**6)
+    gps_df["sec"] = gps_df["ts"].values.astype("int64") // 10**6
     sec_min, sec_max = gps_df["sec"].min(), gps_df["sec"].max()
 
     chunks = []
