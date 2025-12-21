@@ -75,7 +75,7 @@ jobs:
     
     - name: Verify chunks created
       run: |
-        CHUNK_COUNT=$(ls -1 data/chunks/chunk_*.parquet 2>/dev/null | wc -l || echo "0")
+        CHUNK_COUNT=$(find data/chunks -name 'chunk_*.parquet' 2>/dev/null | wc -l || echo "0")
         echo "Created $CHUNK_COUNT chunks"
         if [ "$CHUNK_COUNT" -eq 0 ]; then
           echo "ERROR: No chunks were created!"
@@ -93,7 +93,6 @@ jobs:
     
     - name: Run database tests
       run: |
-        cd /home/runner/work/vehicle-log-system/vehicle-log-system
         pytest tests/test_db.py -v
     
     - name: Run chunking tests
