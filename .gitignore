@@ -105,3 +105,4 @@ actionlint*.tar.gz
 LICENSE.txt
 man/
 docs/
+data/db/*.duckdb
