@@ -38,6 +38,10 @@ vehicle-log-system/
 ├── db/                     # DuckDB サーバー
 │   ├── Dockerfile
 │   └── run_duckdb.py
+├── doc/                    # ドキュメント
+│   ├── README.md
+│   ├── data-flow.md
+│   └── architecture.md
 ├── embedding/              # ベクトル化処理（準備中）
 ├── ingestion/              # 前処理（準備中）
 ├── prepared/               # 統合された時系列データ
@@ -50,6 +54,16 @@ vehicle-log-system/
 └── README.md
 ```
 
+
+---
+
+## 📖 ドキュメント
+
+詳細なシステム設計とデータフローについては、以下のドキュメントを参照してください：
+
+- **[データフロー図](./doc/data-flow.md)** - システム全体の処理フローと各ステージの詳細
+- **[システムアーキテクチャ](./doc/architecture.md)** - 技術スタック、コンポーネント設計、セキュリティ考慮事項
+- **[ドキュメント目次](./doc/README.md)** - 全ドキュメントの一覧
 
 ---
 
