@@ -260,7 +260,7 @@ docker compose up db
   "status": "success",
   "data": [...],
   "count": 100,
-  "timestamp": "2025-12-29T02:52:00Z"
+  "timestamp": "2025-12-29T00:00:00Z"
 }
 ```
 

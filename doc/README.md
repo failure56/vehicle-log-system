@@ -128,7 +128,3 @@ Vehicle Log System の技術ドキュメント集です。
 1. Issue を作成
 2. Pull Request を送信
 3. レビュー後にマージ
-
----
-
-最終更新: 2025-12-29
