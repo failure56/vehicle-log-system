@@ -1,0 +1,130 @@
+name: E2E Pipeline Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build all Docker images
+        run: docker compose build
+
+      # --- パイプライン実行 (順番に) ---
+      - name: "Step 1: Initialize DuckDB schema"
+        run: docker compose run --rm db
+
+      - name: "Step 2: Generate sample data"
+        run: docker compose run --rm chunker python download_sample_data.py
+
+      - name: "Step 3: Ingest data into DuckDB"
+        run: docker compose run --rm ingestion
+
+      - name: "Step 4: Create chunks"
+        run: docker compose run --rm chunker
+
+      - name: "Step 5: Generate embeddings"
+        run: docker compose run --rm embedding
+
+      - name: "Step 6: Start API server"
+        run: docker compose up -d api
+
+      - name: "Step 7: Wait for API to be ready"
+        run: |
+          echo "Waiting for API server..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+              echo "API is ready!"
+              break
+            fi
+            echo "  Attempt $i/30 - not ready yet"
+            sleep 2
+          done
+
+      # --- API エンドポイント検証 ---
+      - name: "Verify: /health"
+        run: |
+          RESP=$(curl -sf http://localhost:8000/health)
+          echo "$RESP"
+          echo "$RESP" | grep -q '"status":"ok"'
+
+      - name: "Verify: /chunks (count > 0)"
+        run: |
+          RESP=$(curl -sf http://localhost:8000/chunks)
+          echo "$RESP"
+          COUNT=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['count'])")
+          echo "Chunk count: $COUNT"
+          [ "$COUNT" -gt 0 ]
+
+      - name: "Verify: /chunk/0"
+        run: |
+          RESP=$(curl -sf http://localhost:8000/chunk/0)
+          echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'chunk_id={d[\"chunk_id\"]}, rows={d[\"total_rows\"]}')"
+
+      - name: "Verify: /search"
+        run: |
+          RESP=$(curl -sf "http://localhost:8000/search?q=high+speed+driving&top_k=3")
+          echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'results={len(d[\"results\"])}')"
+          RESULT_COUNT=$(echo "$RESP" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['results']))")
+          [ "$RESULT_COUNT" -gt 0 ]
+
+      - name: "Verify: /logs"
+        run: |
+          RESP=$(curl -sf "http://localhost:8000/logs?table=gps_log&limit=5")
+          echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'table={d[\"table\"]}, count={d[\"count\"]}')"
+
+      # --- E2E 結果サマリー ---
+      - name: E2E Summary
+        if: always()
+        run: |
+          echo "## :rocket: E2E パイプライン結果" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "| Step | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|--------|" >> "$GITHUB_STEP_SUMMARY"
+
+          # 各エンドポイントの結果を収集
+          for endpoint in health chunks chunk/0 "search?q=test&top_k=1" "logs?table=gps_log&limit=1"; do
+            name=$(echo "$endpoint" | cut -d'?' -f1)
+            if curl -sf "http://localhost:8000/$endpoint" > /dev/null 2>&1; then
+              echo "| \`/$name\` | :white_check_mark: OK |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| \`/$name\` | :x: FAIL |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+          # チャンク・embedding 数
+          CHUNKS=$(curl -sf http://localhost:8000/chunks 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null || echo "N/A")
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Chunks:** ${CHUNKS} | **Pipeline:** db → ingestion → chunking → embedding → api" >> "$GITHUB_STEP_SUMMARY"
+
+      # --- クリーンアップ & ログ保存 ---
+      - name: Collect service logs
+        if: always()
+        run: |
+          mkdir -p work/e2e-logs
+          docker compose logs --no-color > work/e2e-logs/all-services.log 2>&1 || true
+          for svc in db ingestion chunker embedding api; do
+            docker compose logs --no-color "$svc" > "work/e2e-logs/${svc}.log" 2>&1 || true
+          done
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
+
+      - name: Upload E2E logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: work/e2e-logs/
+          retention-days: 14
