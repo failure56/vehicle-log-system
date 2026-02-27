@@ -1,0 +1,48 @@
+[project]
+name = "vehicle-log-system"
+version = "0.2.0"
+description = "車載データ（CAN / GPS / Telemetry）の前処理・チャンク化・ベクトル化・検索パイプライン"
+requires-python = ">=3.11"
+
+dependencies = [
+    "duckdb>=0.10",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "pyarrow>=14.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "httpx>=0.25",
+]
+
+[tool.setuptools.packages.find]
+include = ["api*", "chunking*", "embedding*", "ingestion*", "db*"]
+exclude = ["tests*", "data*", "prepared*", "scripts*", "work*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+cache_dir = "work/.pytest_cache"
+addopts = [
+    "-v",
+    "--tb=short",
+    "-ra",
+    "--junitxml=work/test-results.xml",
+    "--cov=api",
+    "--cov=chunking",
+    "--cov=embedding",
+    "--cov=ingestion",
+    "--cov=db",
+    "--cov-report=term-missing",
+    "--cov-report=html:work/htmlcov",
+    "--cov-report=xml:work/coverage.xml",
+]
+markers = [
+    "slow: 実行が遅いテスト（embedding モデルロード等）",
+    "integration: 統合テスト（Docker / 外部リソース必要）",
+]
