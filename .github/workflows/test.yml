@@ -130,6 +130,7 @@ jobs:
       # --- カバレッジバッジを gist に保存 ---
       - name: Update coverage badge
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        continue-on-error: true
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
