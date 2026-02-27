@@ -1,0 +1,161 @@
+name: Run Tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  # -----------------------------------------------------------------
+  # ユニットテスト (pytest)
+  # -----------------------------------------------------------------
+  unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Create work directory
+        run: mkdir -p work
+
+      - name: Run pytest (skip slow tests)
+        run: pytest -m "not slow"
+
+      # --- テスト結果を Checks タブに表示 ---
+      - name: Test Report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: "Pytest Results"
+          path: work/test-results.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      # --- カバレッジを Job Summary に表示 ---
+      - name: Coverage Summary
+        if: always()
+        run: |
+          echo "## :test_tube: テスト結果サマリー" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # テスト件数の集計
+          if [ -f work/test-results.xml ]; then
+            TESTS=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('work/test-results.xml')
+          root = tree.getroot()
+          ts = root.get('tests', '0')
+          fl = root.get('failures', '0')
+          er = root.get('errors', '0')
+          sk = root.get('skipped', '0')
+          tm = root.get('time', '0')
+          passed = int(ts) - int(fl) - int(er) - int(sk)
+          print(f'| :white_check_mark: Passed | {passed} |')
+          print(f'| :x: Failed | {fl} |')
+          print(f'| :warning: Errors | {er} |')
+          print(f'| :fast_forward: Skipped | {sk} |')
+          print(f'| :stopwatch: Time | {tm}s |')
+          ")
+            echo "### テスト" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Status | Count |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "$TESTS" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # カバレッジの集計
+          if [ -f work/coverage.xml ]; then
+            COV=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('work/coverage.xml')
+          root = tree.getroot()
+          rate = float(root.get('line-rate', '0'))
+          pct = rate * 100
+          print(f'{pct:.1f}')
+          ")
+            echo "COVERAGE_PCT=${COV}" >> "$GITHUB_ENV"
+            echo "### カバレッジ" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            # バッジ風表示
+            if (( $(echo "$COV >= 80" | bc -l) )); then
+              echo ":green_circle: **${COV}%**" >> "$GITHUB_STEP_SUMMARY"
+            elif (( $(echo "$COV >= 60" | bc -l) )); then
+              echo ":yellow_circle: **${COV}%**" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo ":red_circle: **${COV}%**" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+
+            # モジュール別カバレッジテーブル
+            echo "| Module | Stmts | Miss | Cover |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|--------|-------|------|-------|" >> "$GITHUB_STEP_SUMMARY"
+            python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('work/coverage.xml')
+          for pkg in tree.findall('.//package'):
+            for cls in pkg.findall('.//class'):
+              name = cls.get('filename', '')
+              lr = float(cls.get('line-rate', '0')) * 100
+              lines = cls.findall('.//line')
+              total = len(lines)
+              miss = sum(1 for l in lines if l.get('hits') == '0')
+              print(f'| \`{name}\` | {total} | {miss} | {lr:.0f}% |')
+          " >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # --- PR にカバレッジコメントを投稿 ---
+      - name: Coverage PR Comment
+        if: github.event_name == 'pull_request'
+        uses: MishaKav/pytest-coverage-comment@main
+        with:
+          pytest-xml-coverage-path: work/coverage.xml
+          junitxml-path: work/test-results.xml
+          title: "テストカバレッジレポート"
+
+      # --- カバレッジバッジを gist に保存 ---
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ${{ vars.COVERAGE_GIST_ID }}
+          filename: vehicle-log-system-coverage.json
+          label: coverage
+          message: ${{ env.COVERAGE_PCT }}%
+          valColorRange: ${{ env.COVERAGE_PCT }}
+          minColorRange: 40
+          maxColorRange: 90
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: work/
+          retention-days: 14
+
+  # -----------------------------------------------------------------
+  # Docker ビルド検証
+  # -----------------------------------------------------------------
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build all Docker images
+        run: docker compose build
