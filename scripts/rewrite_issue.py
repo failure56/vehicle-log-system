@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 # Validate required environment variables
@@ -39,6 +40,15 @@ prompt = f"""
 system_prompt = """\
 あなたはGitHub Issueの編集者です。
 ユーザーから渡されるIssueの内容を、実装者が作業しやすい形にリライトしてください。
+以下の GitHub Issue をリライトしてください。
+
+{issue_content}
+"""
+
+# system プロンプトで出力形式・ルール・制約を明示的に指定
+system_prompt = """\
+あなたはGitHub Issueの編集者です。
+ユーザーから渡されるIssueの内容を、実装者が作業しやすい形にリライトしてください。
 
 # ルール
 - 元の意図や内容を変更しないこと
@@ -54,38 +64,20 @@ system_prompt = """\
 ## 非要件
 ## 受け入れ条件
 ## 未決事項
+
+{issue_content}
 """
 
-# GitHub Models API エンドポイント（gpt-4o-mini: Premium 0.25回消費）
-url = "https://models.inference.ai.azure.com/chat/completions"
-headers = {
-    "Authorization": f"Bearer {token}",
-    "Content-Type": "application/json",
-}
-data = json.dumps({
-    "model": "gpt-4o-mini",
-    "messages": [
-        {
-            "role": "system",
-            "content": system_prompt,
-        },
-        {
-            "role": "user",
-            "content": prompt,
-        },
-    ],
-    "max_tokens": 4096,
-    "temperature": 0.3,
-}).encode("utf-8")
-
-req = urllib.request.Request(url, data=data, headers=headers)
-
 try:
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
-
-    if not result.get("choices"):
-        print("Error: GitHub Models API returned no response choices", file=sys.stderr)
+    res = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+    )
+    
+    if not res.choices or len(res.choices) == 0:
+        print("Error: OpenAI API returned no response choices", file=sys.stderr)
         sys.exit(1)
 
     print(result["choices"][0]["message"]["content"])
