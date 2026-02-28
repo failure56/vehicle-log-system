@@ -81,7 +81,7 @@ data = json.dumps({
 req = urllib.request.Request(url, data=data, headers=headers)
 
 try:
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:
         result = json.loads(resp.read().decode("utf-8"))
 
     if not result.get("choices"):
