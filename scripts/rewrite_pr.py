@@ -86,7 +86,8 @@ data = json.dumps({
 req = urllib.request.Request(url, data=data, headers=headers)
 
 try:
-    with urllib.request.urlopen(req) as resp:
+    # ネットワーク不調時にハングしないよう、明示的にタイムアウトを指定
+    with urllib.request.urlopen(req, timeout=30) as resp:
         result = json.loads(resp.read().decode("utf-8"))
 
     if not result.get("choices"):
