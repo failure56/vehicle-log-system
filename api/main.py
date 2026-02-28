@@ -50,6 +50,23 @@ app = FastAPI(
 )
 
 
+@app.get("/")
+def root():
+    """ルート: 利用可能なエンドポイント一覧を返す。"""
+    return {
+        "service": "Vehicle Log System API",
+        "version": "0.2.0",
+        "endpoints": {
+            "/health": "ヘルスチェック",
+            "/chunks": "チャンクファイル一覧",
+            "/chunk/{cid}": "特定チャンクの内容（先頭50行）",
+            "/search?q=...&top_k=5": "テキストクエリからベクトル類似検索",
+            "/logs": "CAN/GPS ログの直接クエリ",
+            "/docs": "Swagger UI（自動生成ドキュメント）",
+        },
+    }
+
+
 @app.get("/health")
 def health():
     """ヘルスチェック"""

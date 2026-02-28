@@ -83,6 +83,33 @@ class TestHealth:
 
 
 # ---------------------------------------------------------------------------
+# / (root)
+# ---------------------------------------------------------------------------
+
+class TestRoot:
+    def test_root_returns_200(self, api_client):
+        """GET / が 200 を返すこと。"""
+        resp = api_client.get("/")
+        assert resp.status_code == 200
+
+    def test_root_contains_service_info(self, api_client):
+        """GET / がサービス名とバージョンを含むこと。"""
+        data = api_client.get("/").json()
+        assert data["service"] == "Vehicle Log System API"
+        assert "version" in data
+
+    def test_root_contains_endpoints(self, api_client):
+        """GET / がエンドポイント一覧を含むこと。"""
+        data = api_client.get("/").json()
+        assert "endpoints" in data
+        endpoints = data["endpoints"]
+        # 主要エンドポイントが列挙されていること
+        assert "/health" in endpoints
+        assert "/chunks" in endpoints
+        assert "/search?q=...&top_k=5" in endpoints
+
+
+# ---------------------------------------------------------------------------
 # /chunks
 # ---------------------------------------------------------------------------
 
