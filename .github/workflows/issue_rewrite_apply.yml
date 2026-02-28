@@ -52,10 +52,11 @@ jobs:
               issue_number: context.issue.number
             })
 
-            // "## 概要" という見出しを含むコメント（リライト提案）を検索
+            // "🤖 Issueリライト案" ヘッダーを含むコメント（リライト提案）を検索
             // reverse() で最新のコメントから順に確認
+            const PROPOSAL_MARKER = "🤖 Issueリライト案"
             const proposal = comments.data.reverse()
-              .find(c => c.body.includes("## 概要"))
+              .find(c => c.body.includes(PROPOSAL_MARKER))
 
             // リライト提案が見つからない場合はエラー終了
             if (!proposal) {
@@ -63,13 +64,14 @@ jobs:
               return
             }
 
-            // 提案コメントから "### 🤖 Issueリライト案（提案）" という見出しと説明文を削除
-            // つまり、提案の本体部分のみを抽出
-            const bodyWithoutHeader = proposal.body
-              .replace(/^### 🤖 Issueリライト案（提案）[\s\S]*?\n\n/, "")
-            
-            // 説明文を削除
-            const body = bodyWithoutHeader.replace(/※ 元Issueは変更していません[\s\S]*?とコメントしてください。\n\n/, "")
+            // 提案コメントからヘッダーと説明文を除去し、リライト本文のみを抽出
+            // "## 概要" から始まる部分を抽出（AI出力の本文部分）
+            const match = proposal.body.match(/^(## 概要[\s\S]*)$/m)
+            if (!match) {
+              core.setFailed("Could not extract rewrite body from proposal comment")
+              return
+            }
+            const body = match[1].trim()
 
             // 抽出した内容で Issue 本文を更新
             await github.rest.issues.update({
