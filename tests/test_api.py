@@ -96,7 +96,7 @@ class TestRoot:
         """GET / がサービス名とバージョンを含むこと。"""
         data = api_client.get("/").json()
         assert data["service"] == "Vehicle Log System API"
-        assert "version" in data
+        assert data["version"] == "0.2.0"
 
     def test_root_contains_endpoints(self, api_client):
         """GET / がエンドポイント一覧を含むこと。"""
@@ -106,7 +106,7 @@ class TestRoot:
         # 主要エンドポイントが列挙されていること
         assert "/health" in endpoints
         assert "/chunks" in endpoints
-        assert "/search?q=...&top_k=5" in endpoints
+        assert "/search" in endpoints
 
 
 # ---------------------------------------------------------------------------
