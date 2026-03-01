@@ -64,18 +64,39 @@ system_prompt = """\
 """
 
 try:
-    res = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "user", "content": prompt}
+    # Prepare request payload for GitHub Models API (OpenAI-compatible)
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
         ],
+    }
+
+    request_body = json.dumps(payload).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.githubcopilot.com/openai/v1/chat/completions",
+        data=request_body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
     )
-    
-    if not res.choices or len(res.choices) == 0:
-        print("Error: OpenAI API returned no response choices", file=sys.stderr)
+
+    with urllib.request.urlopen(req) as response:
+        response_text = response.read().decode("utf-8")
+
+    res = json.loads(response_text)
+
+    choices = res.get("choices") or []
+    if not choices:
+        print("Error: GitHub Models API returned no response choices", file=sys.stderr)
         sys.exit(1)
 
-    print(result["choices"][0]["message"]["content"])
+    print(choices[0]["message"]["content"])
 except urllib.error.HTTPError as e:
     body = e.read().decode("utf-8")
     print(f"Error calling GitHub Models API ({e.code}): {body}", file=sys.stderr)
