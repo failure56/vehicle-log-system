@@ -6,4 +6,3 @@
 # 参考: https://docs.github.com/en/github-models/use-github-models/integrating-ai-models-into-your-workflows
 ignore:
   - 'unknown permission scope "models"'
-
