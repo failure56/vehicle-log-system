@@ -1,0 +1,9 @@
+# actionlint 設定ファイル
+#
+# GitHub Models API アクセスに必要な `models: read` パーミッションは
+# 有効な GitHub Actions の権限スコープですが、actionlint がまだ認識していないため
+# 誤検知として無視する設定を追加します。
+# 参考: https://docs.github.com/en/github-models/use-github-models/integrating-ai-models-into-your-workflows
+ignore:
+  - 'unknown permission scope "models"'
+
