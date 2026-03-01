@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 # Validate required environment variables
@@ -59,8 +60,6 @@ system_prompt = """\
 ## テスト
 ## 注意点
 ## 未決事項
-
-{pr_content}
 """
 
 try:
@@ -76,7 +75,7 @@ try:
     request_body = json.dumps(payload).encode("utf-8")
 
     req = urllib.request.Request(
-        "https://api.githubcopilot.com/openai/v1/chat/completions",
+        "https://models.inference.ai.azure.com/chat/completions",
         data=request_body,
         headers={
             "Authorization": f"Bearer {token}",
