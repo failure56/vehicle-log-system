@@ -12,3 +12,7 @@ paths:
     ignore:
       - 'unknown permission scope "models"'
       - 'SC2129'
+  .github/workflows/**/*.yaml:
+    ignore:
+      - 'unknown permission scope "models"'
+      - 'SC2129'
