@@ -40,15 +40,6 @@ prompt = f"""
 system_prompt = """\
 あなたはGitHub Issueの編集者です。
 ユーザーから渡されるIssueの内容を、実装者が作業しやすい形にリライトしてください。
-以下の GitHub Issue をリライトしてください。
-
-{issue_content}
-"""
-
-# system プロンプトで出力形式・ルール・制約を明示的に指定
-system_prompt = """\
-あなたはGitHub Issueの編集者です。
-ユーザーから渡されるIssueの内容を、実装者が作業しやすい形にリライトしてください。
 
 # ルール
 - 元の意図や内容を変更しないこと
@@ -64,13 +55,11 @@ system_prompt = """\
 ## 非要件
 ## 受け入れ条件
 ## 未決事項
-
-{issue_content}
 """
 
 try:
     # GitHub Models API endpoint for chat completions
-    api_url = "https://api.githubcopilot.com/chat/completions"
+    api_url = "https://models.inference.ai.azure.com/chat/completions"
 
     payload = {
         "model": "gpt-4o-mini",
