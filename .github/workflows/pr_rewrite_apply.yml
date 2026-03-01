@@ -56,7 +56,7 @@ jobs:
 
             // "🤖 PRリライト案" ヘッダーを含むコメント（リライト提案）を検索
             // reverse() で最新のコメントから順に確認
-            const proposal = comments.data.reverse()
+            const proposal = comments.reverse()
               .find(c => c.body.includes("## 概要"))
 
             // リライト提案が見つからない場合はエラー終了
