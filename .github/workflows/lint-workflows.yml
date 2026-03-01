@@ -8,6 +8,7 @@
 #
 # トリガー条件：
 # - .github/workflows/ 配下のファイルが変更された時
+# 設定ファイル: .github/linters/actionlint.yml
 # =============================================================================
 
 name: Lint Workflows
