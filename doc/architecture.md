@@ -9,10 +9,8 @@ Vehicle Log System の技術アーキテクチャとコンポーネント設計�
 ```mermaid
 graph TB
     subgraph "データレイヤー"
-        RawData[生データ<br/>CSV/CAN/GPS]
-        Prepared[prepared/<br/>merged.parquet]
-        Chunks[data/chunks/<br/>chunk_*.parquet]
-        Embeddings[embeddings/<br/>vectors]
+        RawData[CSV 生データ<br/>data/sample/]
+        Chunks[Parquet チャンク<br/>data/chunks/]
         DB[(DuckDB<br/>vehicle_logs.duckdb)]
     end
     
@@ -32,20 +30,16 @@ graph TB
     end
     
     RawData --> Ingestion
-    Ingestion --> Prepared
-    Prepared --> Chunker
+    Ingestion --> DB
+    DB --> Chunker
     Chunker --> Chunks
     Chunks --> Embedding
-    Embedding --> Embeddings
-    Embeddings --> DBService
-    DBService --> DB
+    Embedding --> DB
     DB --> API
     API --> Client
     
     style RawData fill:#f9f9f9
-    style Prepared fill:#fff4e1
     style Chunks fill:#fff4e1
-    style Embeddings fill:#fff4e1
     style DB fill:#ffe1e1
     style Ingestion fill:#e1f5ff
     style Chunker fill:#e1f5ff
@@ -61,63 +55,65 @@ graph TB
 
 ### 1. Ingestion Service
 
-**目的:** 複数ソースからの生データを統合し、単一の時系列データを生成
+**目的:** CSV データを DuckDB に直接ロード
 
 **技術スタック:**
 - Python 3.11
 - Pandas (データ処理)
-- PyArrow (Parquet I/O)
+- DuckDB (データベースアクセス)
 
 **主要機能:**
 - CSV ファイルの読み込み
 - タイムスタンプの正規化
-- データの結合とマージ
-- Parquet 形式での出力
+- DuckDB テーブルへのロード
+  - `can_log` テーブル
+  - `gps_log` テーブル
 
 **入力:**
-- `data/sample/` - 生データファイル群
+- `data/sample/` - CSV ファイル群
 
 **出力:**
-- `prepared/merged.parquet` - 統合時系列データ
+- DuckDB テーブル（`data/db/vehicle_logs.duckdb`）
 
 **実行方法:**
 ```bash
 docker compose run ingestion python prepare_data.py
 ```
 
-**ステータス:** 🚧 準備中
+**ステータス:** ✅ 実装済み
 
 ---
 
 ### 2. Chunker Service
 
-**目的:** 時系列データを固定長の時間窓で分割
+**目的:** DuckDB から時系列データを読み取り、固定長の時間窓で分割
 
 **技術スタック:**
 - Python 3.11
 - Pandas
-- NumPy
+- DuckDB
+- PyArrow (Parquet 出力)
 
 **主要機能:**
-- 時系列データの読み込み
-- タイムスタンプベースの分割（デフォルト: 60秒）
-- チャンクへの連番付与
+- DuckDB からデータ読み込み
+- 60秒単位のチャンク分割
+- GPS + CAN の特徴量抽出
+  - 速度統計（平均、最大、最小）
+  - CAN 信号統計
 - Parquet 形式での保存
 
 **アルゴリズム:**
 ```python
 # 擬似コード
 CHUNK_LEN = 60  # 秒
-timestamps = data['ts'] / 1e9  # ナノ秒 → 秒
-chunk_indices = (timestamps // CHUNK_LEN).astype(int)
-
-for idx in unique(chunk_indices):
-    chunk_data = data[chunk_indices == idx]
-    save_to_parquet(f"chunk_{idx}.parquet", chunk_data)
+# DuckDB から GPS + CAN データを読み込み
+# タイムスタンプベースでチャンク分割
+# 各チャンクの特徴量を計算
+# Parquet 形式で保存
 ```
 
 **入力:**
-- `prepared/merged.parquet`
+- DuckDB テーブル (`can_log`, `gps_log`)
 
 **出力:**
 - `data/chunks/chunk_0.parquet`
@@ -133,49 +129,44 @@ docker compose run chunker python make_chunks.py
 - `chunking/make_chunks.py`
 - `chunking/download_sample_data.py`
 
+**ステータス:** ✅ 実装済み
+
 ---
 
 ### 3. Embedding Service
 
-**目的:** 各チャンクから特徴量を抽出し、ベクトル化
+**目的:** 各チャンクから特徴量を抽出し、ベクトル化して DuckDB に保存
 
 **技術スタック:**
 - Python 3.11
-- NumPy (数値計算)
-- Scikit-learn (特徴量抽出)
-- 将来: TensorFlow/PyTorch (深層学習モデル)
+- sentence-transformers (ベクトル化)
+- DuckDB (ベクトル保存)
+- Pandas (データ処理)
 
-**想定される特徴量:**
+**使用モデル:**
+- `all-MiniLM-L6-v2` (384次元ベクトル)
 
-1. **統計的特徴量:**
-   - 平均値、中央値
-   - 標準偏差、分散
-   - 最大値、最小値
-   - パーセンタイル
-
-2. **周波数特徴量:**
-   - FFT (高速フーリエ変換)
-   - スペクトログラム
-   - 主要周波数成分
-
-3. **時系列特徴量:**
-   - 傾き（トレンド）
-   - 変化率
-   - ピーク検出
+**処理フロー:**
+1. Parquet チャンクファイルを読み込み
+2. 特徴量をテキスト表現に変換
+3. sentence-transformers でベクトル化
+4. DuckDB `embeddings` テーブルに保存
 
 **入力:**
 - `data/chunks/chunk_*.parquet`
 
 **出力:**
-- `embeddings/vectors.npy` - ベクトルデータ
-- `embeddings/metadata.json` - メタデータ
+- DuckDB `embeddings` テーブル
 
 **実行方法:**
 ```bash
-docker compose run embedding python create_embeddings.py
+docker compose run embedding python embed_chunks.py
 ```
 
-**ステータス:** 🚧 準備中
+**実装ファイル:**
+- `embedding/embed_chunks.py`
+
+**ステータス:** ✅ 実装済み
 
 ---
 
@@ -214,45 +205,58 @@ CREATE TABLE gps_log (
     heading DOUBLE         -- 方位角 (度)
 );
 
+-- ベクトル埋め込みテーブル
+CREATE TABLE embeddings (
+    chunk_id INTEGER,       -- チャンク ID
+    embedding DOUBLE[384]   -- ベクトル (384次元)
+);
+
 -- インデックス
 CREATE INDEX idx_can_ts ON can_log(ts);
 CREATE INDEX idx_gps_ts ON gps_log(ts);
 ```
 
 **入力:**
-- `embeddings/` - ベクトルデータ
+- Ingestion からの生データ
+- Embedding からのベクトルデータ
 
 **データベースファイル:**
 - `data/db/vehicle_logs.duckdb`
 
 **実行方法:**
 ```bash
-docker compose up db
+docker compose run db
 ```
 
 **実装ファイル:**
 - `db/run_duckdb.py`
 
+**特徴:**
+- ファイルベースの組み込みデータベース
+- 全サービスがボリュームマウント (`./data`) 経由でアクセス
+- サーバープロセス不要
+
 ---
 
 ### 5. API Service (FastAPI)
 
-**目的:** REST API による データアクセス層の提供
+**目的:** REST API によるデータアクセス層の提供
 
 **技術スタック:**
 - FastAPI (高速な非同期Webフレームワーク)
 - Uvicorn (ASGI サーバー)
 - Pydantic (データバリデーション)
+- DuckDB (データベースアクセス)
 
 **エンドポイント設計:**
 
 | メソッド | パス | 説明 |
 |---------|------|------|
-| GET | `/` | ヘルスチェック |
-| GET | `/chunks` | チャンク一覧取得 |
-| GET | `/chunks/{chunk_id}` | 特定チャンクのデータ取得 |
-| GET | `/query` | SQL クエリ実行 (将来) |
-| POST | `/search` | ベクトル類似検索 (将来) |
+| GET | `/health` | ヘルスチェック |
+| GET | `/chunks` | チャンクファイル一覧 |
+| GET | `/chunk/{cid}` | 特定チャンクの先頭50行 |
+| GET | `/search?q=...&top_k=5` | ベクトル類似検索 |
+| GET | `/logs?table=gps_log` | CAN/GPS ログ直接クエリ |
 
 **レスポンス形式:**
 ```json
@@ -278,12 +282,23 @@ docker compose up api
 
 **アクセス:**
 ```bash
-curl http://localhost:8000/
+# ヘルスチェック
+curl http://localhost:8000/health
+
+# チャンク一覧
 curl http://localhost:8000/chunks
+
+# 類似検索
+curl "http://localhost:8000/search?q=acceleration&top_k=5"
+
+# Swagger UI
+open http://localhost:8000/docs
 ```
 
 **実装ファイル:**
 - `api/main.py`
+
+**ステータス:** ✅ 実装済み
 
 ---
 
@@ -339,18 +354,24 @@ CMD ["python", "make_chunks.py"]
 
 ### Docker Compose オーケストレーション
 
-**サービス依存関係:**
-```yaml
-ingestion → chunker → embedding → db → api
+**サービス実行順序:**
 ```
+db → ingestion → chunker → embedding → api
+```
+
+**実際の構成:**
+- すべてのサービスが独立して実行可能
+- 各サービスは `docker compose run [service] python [script]` で実行
+- API のみポート公開 (`8000:8000`)
 
 **ボリュームマウント戦略:**
 - ホスト側の `./data` を各コンテナの `/app/data` にマウント
 - データの永続化と共有を実現
+- DuckDB ファイル (`data/db/vehicle_logs.duckdb`) をすべてのサービスが共有
 
 **ネットワーク:**
 - デフォルトブリッジネットワーク
-- サービス名で相互通信可能
+- サービス名で相互通信可能（ただし現在は DuckDB ファイル経由のデータ共有のみ）
 
 ---
 
