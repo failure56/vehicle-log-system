@@ -30,9 +30,11 @@ on:
     types: [opened]
 
 # GitHub API で Issue コメントを作成し、リポジトリのコードにアクセスするための権限を付与
+# models: read は GitHub Models API（AI リライト）へのアクセスに必要
 permissions:
   contents: read
   issues: write
+  models: read
 
 jobs:
   # ===========================================================================
