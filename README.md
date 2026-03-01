@@ -1,4 +1,9 @@
 # Vehicle Log System  
+
+![Tests](https://github.com/failure56/vehicle-log-system/actions/workflows/test.yml/badge.svg)
+![E2E](https://github.com/failure56/vehicle-log-system/actions/workflows/e2e-pipeline.yml/badge.svg)
+![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/failure56/COVERAGE_GIST_ID/raw/vehicle-log-system-coverage.json)
+
 車載データ（CAN / GPS / Telemetry）の前処理・チャンク化・特徴量抽出・埋め込み・検索を行うためのモジュール型データパイプラインです。
 
 ---
@@ -8,19 +13,17 @@
 Vehicle Log System は以下の処理を段階的に行います：
 
 1. **Ingestion**  
-   生データ（CSV / テレメトリ / CAN / GPS）を統合し、  
-   単一の時系列データ `merged.parquet` を生成。
+   生データ（CSV / テレメトリ / CAN / GPS）を DuckDB にロード。
 
 2. **Chunking**  
-   例：60秒ごとに時間窓で分割し、  
-   チャンク単位の特徴量を抽出。
+   60秒ごとに時間窓で分割し、  
+   GPS + CAN のチャンク単位の特徴量を抽出。
 
 3. **Embedding**  
-   各チャンクをベクトル化して保存（類似検索などに利用）。
+   各チャンクを sentence-transformers (`all-MiniLM-L6-v2`) でベクトル化して DuckDB に保存。
 
 4. **DuckDB + FastAPI**  
-   生成データを DuckDB に保存し、  
-   API から検索やクエリを実行可能。
+   DuckDB に保存されたデータを FastAPI からクエリ・ベクトル類似検索。
 
 ---
 
@@ -35,25 +38,38 @@ vehicle-log-system/
 │   ├── Dockerfile
 │   ├── make_chunks.py
 │   └── download_sample_data.py
-├── db/                     # DuckDB サーバー
+├── db/                     # DuckDB スキーマ初期化
 │   ├── Dockerfile
 │   └── run_duckdb.py
 ├── doc/                    # ドキュメント
-│   ├── README.md
-│   ├── data-flow.md
-│   └── architecture.md
-├── embedding/              # ベクトル化処理（準備中）
-├── ingestion/              # 前処理（準備中）
-├── prepared/               # 統合された時系列データ
+│   ├── data-flow.md        # データフロー図
+│   └── architecture.md     # アーキテクチャ設計
+├── embedding/              # ベクトル化処理
+│   ├── Dockerfile
+│   └── embed_chunks.py
+├── ingestion/              # CSV → DuckDB ロード
+│   ├── Dockerfile
+│   └── prepare_data.py
+├── prepared/               # (予約: 統合時系列データ)
 ├── data/
-│   ├── chunks/             # チャンク済みデータ
+│   ├── chunks/             # チャンク済み Parquet
 │   ├── db/                 # DuckDB ファイル
 │   │   └── vehicle_logs.duckdb
-│   └── sample/             # サンプルデータ
+│   └── sample/             # サンプル CSV
+├── scripts/
+│   └── rewrite_issue.py    # Issue リライト AI スクリプト
+├── .github/
+│   ├── copilot-instructions.md
+│   ├── copilot/agents/     # Copilot カスタムエージェント
+│   │   ├── pipeline.md
+│   │   ├── data-engineer.md
+│   │   ├── vehicle-api.md
+│   │   └── issue-ops.md
+│   ├── prompts/
+│   └── workflows/
 ├── docker-compose.yml
 └── README.md
 ```
-
 
 ---
 
@@ -71,51 +87,79 @@ vehicle-log-system/
 
 ### 前提条件
 - Docker および Docker Compose がインストールされていること
-- サンプルデータが `data/sample/` に配置されていること
 
 ### 実行手順
 
-**1. サンプルデータのダウンロード（初回のみ）**
+**1. DB スキーマ初期化**
 ```bash
-docker compose run chunking python download_sample_data.py
+docker compose run db
 ```
 
-**2. チャンク化処理**
+**2. サンプルデータのダウンロード（初回のみ）**
 ```bash
-docker compose run chunking python make_chunks.py
+docker compose run chunker python download_sample_data.py
 ```
 
-**3. 全サービスの起動**
+**3. CSV を DuckDB にロード**
 ```bash
-docker compose up
+docker compose run ingestion python prepare_data.py
 ```
 
-**4. API へのアクセス**
+**4. チャンク化処理**
+```bash
+docker compose run chunker python make_chunks.py
+```
+
+**5. ベクトル化（Embedding）**
+```bash
+docker compose run embedding python embed_chunks.py
+```
+
+**6. API サーバーの起動**
+```bash
+docker compose up api
+```
+
+**7. API へのアクセス**
 - **API Server**: http://localhost:8000
-- **DuckDB**: ポート 5432 で接続可能
+- **Swagger UI**: http://localhost:8000/docs
+- **チャンク一覧**: http://localhost:8000/chunks
+- **類似検索**: http://localhost:8000/search?q=acceleration&top_k=5
+
+---
+
+## 🔌 API エンドポイント
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/health` | ヘルスチェック |
+| GET | `/chunks` | チャンクファイル一覧 |
+| GET | `/chunk/{cid}` | 特定チャンクの先頭50行 |
+| GET | `/search?q=...&top_k=5` | ベクトル類似検索 |
+| GET | `/logs?table=gps_log&vehicle_id=...` | CAN/GPS ログ直接クエリ |
 
 ---
 
 ## 🔧 各処理の詳細
 
 ### 1. Ingestion（前処理）
-- **ステータス**: 準備中（`ingestion/`）
-- **目的**: 生データ（CSV / テレメトリ）を統合
-- **出力**: `prepared/merged.parquet`
+- **実装**: `ingestion/prepare_data.py`
+- **処理**: `data/sample/` 内の CSV を読み込み、DuckDB の `can_log` / `gps_log` テーブルにロード
+- **出力**: DuckDB テーブル
 
 ### 2. Chunking（チャンク化）
 - **実装**: `chunking/make_chunks.py`
-- **処理**: 時系列データを 60秒ごとに分割
-- **出力**: `data/chunks/` にチャンクデータを保存
+- **処理**: GPS + CAN データを 60秒ウィンドウで分割、特徴量（速度統計・CAN信号統計等）を付与
+- **出力**: `data/chunks/chunk_*.parquet`
 
 ### 3. Embedding（埋め込み）
-- **ステータス**: 準備中（`embedding/`）
-- **目的**: 各チャンクをベクトル化
-- **用途**: 類似検索、シーン分類など
+- **実装**: `embedding/embed_chunks.py`
+- **モデル**: sentence-transformers `all-MiniLM-L6-v2`（384次元）
+- **処理**: チャンクの特徴量をテキスト表現に変換 → ベクトル化 → DuckDB `embeddings` テーブルに保存
 
 ### 4. データベース & API
-- **DB**: DuckDB（`data/db/vehicle_logs.duckdb`）
-- **API**: FastAPI サーバー（`api/main.py`）
+- **DB**: DuckDB（`data/db/vehicle_logs.duckdb`）— ファイルベース、全サービスがボリュームマウント経由でアクセス
+- **API**: FastAPI サーバー（`api/main.py`）— チャンク確認・ベクトル検索・ログクエリ
 
 ---
 
@@ -123,9 +167,11 @@ docker compose up
 
 | 問題 | 解決方法 |
 |------|--------|
-| サンプルデータが見つからない | `docker compose run chunking python download_sample_data.py` を実行 |
-| DuckDB に接続できない | `docker compose logs db` でログを確認 |
+| サンプルデータが見つからない | `docker compose run chunker python download_sample_data.py` を実行 |
+| DuckDB にテーブルがない | `docker compose run db` でスキーマを初期化 |
+| チャンクが空 | `docker compose run ingestion python prepare_data.py` でデータをロード後、チャンク化 |
 | API が起動しない | `docker compose logs api` でエラーを確認 |
+| 検索で 503 エラー | `docker compose run embedding python embed_chunks.py` でベクトルを生成 |
 
 
 ## 📊 データについて

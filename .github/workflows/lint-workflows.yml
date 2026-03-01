@@ -1,0 +1,44 @@
+# =============================================================================
+# Workflow Lint
+# =============================================================================
+#
+# GitHub Actions ワークフロー YAML の静的解析を行います。
+# actionlint を使用して構文エラー・式の型ミスマッチ・
+# permissions 設定ミスなどを検出します。
+#
+# トリガー条件：
+# - .github/workflows/ 配下のファイルが変更された時
+# 設定ファイル: .github/linters/actionlint.yml
+# =============================================================================
+
+name: Lint Workflows
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Super-Linter
+        uses: super-linter/super-linter/slim@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GitHub Actions ワークフローのみを検証
+          VALIDATE_GITHUB_ACTIONS: true
+          # 他の言語のリントは無効化（専用ワークフローのため）
+          VALIDATE_ALL_CODEBASE: false
+          # デフォルトブランチとの差分のみチェック
+          DEFAULT_BRANCH: main

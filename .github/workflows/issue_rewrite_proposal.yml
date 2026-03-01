@@ -4,7 +4,7 @@
 #
 # このワークフローは以下を自動実行します：
 # - 新規 Issue を検出
-# - AI（OpenAI）を使用して Issue の文章をリライト・改善
+# - AI（GitHub Models API）を使用して Issue の文章をリライト・改善
 # - リライト提案をコメントで投稿
 # - ユーザーが `/apply-rewrite` コマンドで適用を指示可能
 #
@@ -12,7 +12,7 @@
 # - 新しい Issue が開かれた時に自動実行
 #
 # 前提条件：
-# - GitHub Secrets に OPENAI_API_KEY が設定されている必要があります
+# - GitHub Copilot が有効であること（GitHub Models API を使用）
 # - scripts/rewrite_issue.py がリポジトリに存在
 #
 # 機能：
@@ -30,9 +30,11 @@ on:
     types: [opened]
 
 # GitHub API で Issue コメントを作成し、リポジトリのコードにアクセスするための権限を付与
+# models: read は GitHub Models API（AI リライト）へのアクセスに必要
 permissions:
   contents: read
   issues: write
+  models: read
 
 jobs:
   # ===========================================================================
@@ -51,12 +53,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 必要な Python パッケージをインストール
-      - name: Install dependencies
-        run: pip install openai
-
       # Issue 題名と本文を AI でリライト処理
-      # 環境変数経由で ISSUE_TITLE, ISSUE_BODY, OPENAI_API_KEY を渡す
+      # 環境変数経由で ISSUE_TITLE, ISSUE_BODY, GITHUB_TOKEN を渡す
       - name: Run rewrite
         id: rewrite
         env:
@@ -64,8 +62,8 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           # 新規開設された Issue の本文を環境変数に設定
           ISSUE_BODY: ${{ github.event.issue.body }}
-          # OpenAI API キーを環境変数に設定
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # GitHub Token（GitHub Models API の認証に使用）
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # rewrite_issue.py を実行してリライト結果を取得
           RESULT=$(python scripts/rewrite_issue.py)
@@ -80,16 +78,18 @@ jobs:
       # ユーザーが `/apply-rewrite` コマンドで確定可能な形式
       - name: Post proposal
         uses: actions/github-script@v7
+        env:
+          PROPOSAL_TEXT: ${{ steps.rewrite.outputs.TEXT }}
         with:
           script: |
-            // Issue コメントを作成
-            const proposalText = `${{ steps.rewrite.outputs.TEXT }}`;
+            // 環境変数経由でリライト結果を取得（JSテンプレートリテラルの構文エラーを回避）
+            const proposalText = process.env.PROPOSAL_TEXT;
             const body = "### 🤖 Issueリライト案（提案）\n\n" +
               "※ 元Issueは変更していません  \n" +
               "問題なければ `/apply-rewrite` とコメントしてください。\n\n" +
               proposalText;
             
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
