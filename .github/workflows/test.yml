@@ -204,22 +204,22 @@ jobs:
           # テスト件数の集計
           if [ -f work/test-results.xml ]; then
             TESTS=$(python3 -c "
-import xml.etree.ElementTree as ET
-tree = ET.parse('work/test-results.xml')
-root = tree.getroot()
-ts = root.find('testsuite') if root.tag == 'testsuites' else root
-fl = ts.get('failures', '0')
-er = ts.get('errors', '0')
-sk = ts.get('skipped', '0')
-total = int(ts.get('tests', '0'))
-tm = ts.get('time', '0')
-passed = total - int(fl) - int(er) - int(sk)
-print(f'| :white_check_mark: Passed | {passed} |')
-print(f'| :x: Failed | {fl} |')
-print(f'| :warning: Errors | {er} |')
-print(f'| :fast_forward: Skipped | {sk} |')
-print(f'| :stopwatch: Time | {tm}s |')
-")
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('work/test-results.xml')
+          root = tree.getroot()
+          ts = root.find('testsuite') if root.tag == 'testsuites' else root
+          fl = ts.get('failures', '0')
+          er = ts.get('errors', '0')
+          sk = ts.get('skipped', '0')
+          total = int(ts.get('tests', '0'))
+          tm = ts.get('time', '0')
+          passed = total - int(fl) - int(er) - int(sk)
+          print(f'| :white_check_mark: Passed | {passed} |')
+          print(f'| :x: Failed | {fl} |')
+          print(f'| :warning: Errors | {er} |')
+          print(f'| :fast_forward: Skipped | {sk} |')
+          print(f'| :stopwatch: Time | {tm}s |')
+          ")
             {
               echo "### テスト"
               echo "| Status | Count |"
@@ -232,13 +232,13 @@ print(f'| :stopwatch: Time | {tm}s |')
           # カバレッジの集計
           if [ -f work/coverage.xml ]; then
             COV=$(python3 -c "
-import xml.etree.ElementTree as ET
-tree = ET.parse('work/coverage.xml')
-root = tree.getroot()
-rate = float(root.get('line-rate', '0'))
-pct = rate * 100
-print(f'{pct:.1f}')
-")
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('work/coverage.xml')
+          root = tree.getroot()
+          rate = float(root.get('line-rate', '0'))
+          pct = rate * 100
+          print(f'{pct:.1f}')
+          ")
             echo "COVERAGE_PCT=${COV}" >> "$GITHUB_ENV"
             # バッジ風表示
             if (( $(echo "$COV >= 80" | bc -l) )); then
@@ -249,17 +249,17 @@ print(f'{pct:.1f}')
               BADGE=":red_circle: **${COV}%**"
             fi
             MODULE_TABLE=$(python3 -c "
-import xml.etree.ElementTree as ET
-tree = ET.parse('work/coverage.xml')
-for pkg in tree.findall('.//package'):
-  for cls in pkg.findall('.//class'):
-    name = cls.get('filename', '')
-    lr = float(cls.get('line-rate', '0')) * 100
-    lines = cls.findall('.//line')
-    total = len(lines)
-    miss = sum(1 for l in lines if l.get('hits') == '0')
-    print(f'| \`{name}\` | {total} | {miss} | {lr:.0f}% |')
-")
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('work/coverage.xml')
+          for pkg in tree.findall('.//package'):
+            for cls in pkg.findall('.//class'):
+              name = cls.get('filename', '')
+              lr = float(cls.get('line-rate', '0')) * 100
+              lines = cls.findall('.//line')
+              total = len(lines)
+              miss = sum(1 for l in lines if l.get('hits') == '0')
+              print(f'| \`{name}\` | {total} | {miss} | {lr:.0f}% |')
+          ")
             {
               echo "### カバレッジ"
               echo ""
@@ -319,7 +319,7 @@ for pkg in tree.findall('.//package'):
             
             const comment = [
               marker,
-              '## 📊 テストカバレッジレポート',
+              '## 📊 テスト結果',
               '',
               testSummary || 'テスト結果が利用できません。',
               '',
