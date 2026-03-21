@@ -79,28 +79,40 @@ jobs:
               ? context.sha
               : (context.payload.pull_request?.head?.sha || context.sha);
 
-            await github.rest.checks.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              name: 'Pytest Results',
-              head_sha: headSha,
-              status: 'completed',
-              conclusion,
-              output: {
-                title: 'Pytest Results',
-                summary: [
-                  '## Pytest Results',
-                  '',
-                  `- Passed: ${passed}`,
-                  `- Failed: ${failures}`,
-                  `- Errors: ${errors}`,
-                  `- Skipped: ${skipped}`,
-                  `- Duration: ${duration}s`,
-                ].join('\n'),
-                text: `Source: \`${testReportPath}\``,
-              },
-            });
+            // Skip creating a Check for forked pull requests where GITHUB_TOKEN is read-only.
+            const isForkPr = context.eventName === 'pull_request'
+              && context.payload.pull_request?.head?.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`;
 
+            if (isForkPr) {
+              core.info('Skipping GitHub Check creation for fork pull request due to limited GITHUB_TOKEN permissions.');
+              return;
+            }
+
+            try {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'Pytest Results',
+                head_sha: headSha,
+                status: 'completed',
+                conclusion,
+                output: {
+                  title: 'Pytest Results',
+                  summary: [
+                    '## Pytest Results',
+                    '',
+                    `- Passed: ${passed}`,
+                    `- Failed: ${failures}`,
+                    `- Errors: ${errors}`,
+                    `- Skipped: ${skipped}`,
+                    `- Duration: ${duration}s`,
+                  ].join('\n'),
+                  text: `Source: \`${testReportPath}\``,
+                },
+              });
+            } catch (error) {
+              core.warning(`Failed to create GitHub Check for pytest results: ${error.message || error}`);
+            }
       # --- カバレッジを Job Summary に表示 ---
       - name: Coverage Summary
         if: always()
