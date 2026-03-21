@@ -74,12 +74,15 @@ jobs:
             const passed = tests - failures - errors - skipped;
             const duration = testAttrs.time || '0';
             const conclusion = failures > 0 || errors > 0 ? 'failure' : 'success';
+            const headSha = context.eventName === 'pull_request'
+              ? context.sha
+              : (context.payload.pull_request?.head?.sha || context.sha);
 
             await github.rest.checks.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               name: 'Pytest Results',
-              head_sha: context.payload.pull_request?.head?.sha || context.sha,
+              head_sha: headSha,
               status: 'completed',
               conclusion,
               output: {
