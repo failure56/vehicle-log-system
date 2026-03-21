@@ -10,6 +10,7 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
+  issues: write
 
 jobs:
   # -----------------------------------------------------------------
@@ -39,13 +40,79 @@ jobs:
       # --- テスト結果を Checks タブに表示 ---
       - name: Test Report
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: actions/github-script@v8
         with:
-          name: "Pytest Results"
-          path: work/test-results.xml
-          reporter: java-junit
-          fail-on-error: false
+          script: |
+            const fs = require('fs');
 
+            const extractAttributes = (xml, tagName) => {
+              const tagMatch = xml.match(new RegExp(`<${tagName}\\b([^>]*)>`, 'i'));
+              if (!tagMatch) {
+                return {};
+              }
+
+              return Object.fromEntries(
+                Array.from(
+                  tagMatch[1].matchAll(/([\w:-]+)="([^"]*)"/g),
+                  ([, key, value]) => [key, value],
+                ),
+              );
+            };
+
+            const testReportPath = 'work/test-results.xml';
+            if (!fs.existsSync(testReportPath)) {
+              core.warning(`Test report not found: ${testReportPath}`);
+              return;
+            }
+
+            const xml = fs.readFileSync(testReportPath, 'utf8');
+            const testAttrs = extractAttributes(xml, 'testsuite');
+
+            const tests = Number.parseInt(testAttrs.tests || '0', 10);
+            const failures = Number.parseInt(testAttrs.failures || '0', 10);
+            const errors = Number.parseInt(testAttrs.errors || '0', 10);
+            const skipped = Number.parseInt(testAttrs.skipped || '0', 10);
+            const passed = tests - failures - errors - skipped;
+            const duration = testAttrs.time || '0';
+            const conclusion = failures > 0 || errors > 0 ? 'failure' : 'success';
+            const headSha = context.eventName === 'pull_request'
+              ? context.sha
+              : (context.payload.pull_request?.head?.sha || context.sha);
+
+            // Skip creating a Check for forked pull requests where GITHUB_TOKEN is read-only.
+            const isForkPr = context.eventName === 'pull_request'
+              && context.payload.pull_request?.head?.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`;
+
+            if (isForkPr) {
+              core.info('Skipping GitHub Check creation for fork pull request due to limited GITHUB_TOKEN permissions.');
+              return;
+            }
+
+            try {
+              await github.rest.checks.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: 'Pytest Results',
+                head_sha: headSha,
+                status: 'completed',
+                conclusion,
+                output: {
+                  title: 'Pytest Results',
+                  summary: [
+                    '## Pytest Results',
+                    '',
+                    `- Passed: ${passed}`,
+                    `- Failed: ${failures}`,
+                    `- Errors: ${errors}`,
+                    `- Skipped: ${skipped}`,
+                    `- Duration: ${duration}s`,
+                  ].join('\n'),
+                  text: `Source: \`${testReportPath}\``,
+                },
+              });
+            } catch (error) {
+              core.warning(`Failed to create GitHub Check for pytest results: ${error.message || error}`);
+            }
       # --- カバレッジを Job Summary に表示 ---
       - name: Coverage Summary
         if: always()
@@ -59,23 +126,26 @@ jobs:
           import xml.etree.ElementTree as ET
           tree = ET.parse('work/test-results.xml')
           root = tree.getroot()
-          ts = root.get('tests', '0')
-          fl = root.get('failures', '0')
-          er = root.get('errors', '0')
-          sk = root.get('skipped', '0')
-          tm = root.get('time', '0')
-          passed = int(ts) - int(fl) - int(er) - int(sk)
+          ts = root.find('testsuite') if root.tag == 'testsuites' else root
+          fl = ts.get('failures', '0')
+          er = ts.get('errors', '0')
+          sk = ts.get('skipped', '0')
+          total = int(ts.get('tests', '0'))
+          tm = ts.get('time', '0')
+          passed = total - int(fl) - int(er) - int(sk)
           print(f'| :white_check_mark: Passed | {passed} |')
           print(f'| :x: Failed | {fl} |')
           print(f'| :warning: Errors | {er} |')
           print(f'| :fast_forward: Skipped | {sk} |')
           print(f'| :stopwatch: Time | {tm}s |')
           ")
-            echo "### テスト" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Status | Count |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-            echo "$TESTS" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### テスト"
+              echo "| Status | Count |"
+              echo "|--------|-------|"
+              echo "$TESTS"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # カバレッジの集計
@@ -89,22 +159,15 @@ jobs:
           print(f'{pct:.1f}')
           ")
             echo "COVERAGE_PCT=${COV}" >> "$GITHUB_ENV"
-            echo "### カバレッジ" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
             # バッジ風表示
             if (( $(echo "$COV >= 80" | bc -l) )); then
-              echo ":green_circle: **${COV}%**" >> "$GITHUB_STEP_SUMMARY"
+              BADGE=":green_circle: **${COV}%**"
             elif (( $(echo "$COV >= 60" | bc -l) )); then
-              echo ":yellow_circle: **${COV}%**" >> "$GITHUB_STEP_SUMMARY"
+              BADGE=":yellow_circle: **${COV}%**"
             else
-              echo ":red_circle: **${COV}%**" >> "$GITHUB_STEP_SUMMARY"
+              BADGE=":red_circle: **${COV}%**"
             fi
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-
-            # モジュール別カバレッジテーブル
-            echo "| Module | Stmts | Miss | Cover |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|--------|-------|------|-------|" >> "$GITHUB_STEP_SUMMARY"
-            python3 -c "
+            MODULE_TABLE=$(python3 -c "
           import xml.etree.ElementTree as ET
           tree = ET.parse('work/coverage.xml')
           for pkg in tree.findall('.//package'):
@@ -115,17 +178,117 @@ jobs:
               total = len(lines)
               miss = sum(1 for l in lines if l.get('hits') == '0')
               print(f'| \`{name}\` | {total} | {miss} | {lr:.0f}% |')
-          " >> "$GITHUB_STEP_SUMMARY"
+          ")
+            {
+              echo "### カバレッジ"
+              echo ""
+              echo "$BADGE"
+              echo ""
+              echo "| Module | Stmts | Miss | Cover |"
+              echo "|--------|-------|------|-------|"
+              echo "$MODULE_TABLE"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # --- PR にカバレッジコメントを投稿 ---
-      - name: Coverage PR Comment
-        if: github.event_name == 'pull_request'
-        uses: MishaKav/pytest-coverage-comment@main
+      # --- PR にテスト結果・カバレッジコメントを投稿 ---
+      - name: Test & Coverage PR Comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
         with:
-          pytest-xml-coverage-path: work/coverage.xml
-          junitxml-path: work/test-results.xml
-          title: "テストカバレッジレポート"
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- vehicle-log-system:test-report -->';
+
+            const extractAttributes = (xml, tagName) => {
+              const tagMatch = xml.match(new RegExp(`<${tagName}\\b([^>]*)>`, 'i'));
+              if (!tagMatch) {
+                return {};
+              }
+              return Object.fromEntries(
+                Array.from(
+                  tagMatch[1].matchAll(/([\w:-]+)="([^"]*)"/g),
+                  ([, key, value]) => [key, value],
+                ),
+              );
+            };
+
+            const lines = [marker, '## 📋 テスト結果 & カバレッジ', ''];
+
+            // --- テスト結果の集計 ---
+            if (fs.existsSync('work/test-results.xml')) {
+              const testXml = fs.readFileSync('work/test-results.xml', 'utf8');
+              const testAttrs = extractAttributes(testXml, 'testsuite');
+              const tests    = parseInt(testAttrs.tests    || '0', 10);
+              const failures = parseInt(testAttrs.failures || '0', 10);
+              const errors   = parseInt(testAttrs.errors   || '0', 10);
+              const skipped  = parseInt(testAttrs.skipped  || '0', 10);
+              const passed   = tests - failures - errors - skipped;
+              const duration = parseFloat(testAttrs.time   || '0').toFixed(2);
+              const icon     = failures > 0 || errors > 0 ? '❌' : '✅';
+
+              lines.push(
+                `### ${icon} テスト結果`,
+                '',
+                '| ✅ Passed | ❌ Failed | ⚠️ Errors | ⏭️ Skipped | ⏱️ Duration |',
+                '|------:|------:|------:|------:|------:|',
+                `| ${passed} | ${failures} | ${errors} | ${skipped} | ${duration}s |`,
+                '',
+              );
+            } else {
+              lines.push('### テスト結果', '', 'テスト結果が利用できません。', '');
+            }
+
+            // --- カバレッジの集計 ---
+            if (fs.existsSync('work/coverage.xml')) {
+              const coverageXml = fs.readFileSync('work/coverage.xml', 'utf8');
+              const coverageAttrs = extractAttributes(coverageXml, 'coverage');
+              const rate = parseFloat(coverageAttrs['line-rate'] || '0') * 100;
+              const pct = rate.toFixed(1);
+              const badge = rate >= 80 ? '🟢' : rate >= 60 ? '🟡' : '🔴';
+
+              lines.push(
+                `### ${badge} カバレッジ: ${pct}%`,
+                '',
+              );
+            } else {
+              lines.push('### カバレッジ', '', 'カバレッジ情報が利用できません。', '');
+            }
+
+            lines.push(`_Workflow run: [#${context.runNumber}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})_`);
+
+            const body = lines.join('\n');
+
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                per_page: 100,
+              });
+
+              const existingComment = comments.find((entry) =>
+                entry.user?.type === 'Bot' && entry.body?.includes(marker),
+              );
+
+              if (existingComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existingComment.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body,
+                });
+              }
+            } catch (err) {
+              // fork PRなど書き込み権限がない場合は警告のみ（jobは失敗させない）
+              core.warning(`PR comment skipped: ${err.message}`);
+            }
 
       # --- カバレッジバッジを gist に保存 ---
       - name: Update coverage badge
