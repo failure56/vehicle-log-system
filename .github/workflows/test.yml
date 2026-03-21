@@ -52,7 +52,7 @@ jobs:
 
               return Object.fromEntries(
                 Array.from(
-                  tagMatch[1].matchAll(/([\\w:-]+)="([^"]*)"/g),
+                  tagMatch[1].matchAll(/([\w:-]+)="([^"]*)"/g),
                   ([, key, value]) => [key, value],
                 ),
               );
@@ -65,9 +65,7 @@ jobs:
             }
 
             const xml = fs.readFileSync(testReportPath, 'utf8');
-            const testsuitesAttrs = extractAttributes(xml, 'testsuites');
-            const testsuiteAttrs = extractAttributes(xml, 'testsuite');
-            const testAttrs = Object.keys(testsuitesAttrs).length > 0 ? testsuitesAttrs : testsuiteAttrs;
+            const testAttrs = extractAttributes(xml, 'testsuite');
 
             const tests = Number.parseInt(testAttrs.tests || '0', 10);
             const failures = Number.parseInt(testAttrs.failures || '0', 10);
@@ -99,6 +97,103 @@ jobs:
               },
             });
 
+      # --- テスト結果を PR にコメント ---
+      - name: Test PR Comment
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- vehicle-log-system:test-results -->';
+
+            const extractAttributes = (xml, tagName) => {
+              const tagMatch = xml.match(new RegExp(`<${tagName}\\b([^>]*)>`, 'i'));
+              if (!tagMatch) {
+                return {};
+              }
+              return Object.fromEntries(
+                Array.from(
+                  tagMatch[1].matchAll(/([\w:-]+)="([^"]*)"/g),
+                  ([, key, value]) => [key, value],
+                ),
+              );
+            };
+
+            const testReportPath = 'work/test-results.xml';
+            if (!fs.existsSync(testReportPath)) {
+              core.warning(`Test report not found: ${testReportPath}`);
+              return;
+            }
+
+            const xml = fs.readFileSync(testReportPath, 'utf8');
+            const testAttrs = extractAttributes(xml, 'testsuite');
+            const tests    = parseInt(testAttrs.tests    || '0', 10);
+            const failures = parseInt(testAttrs.failures || '0', 10);
+            const errors   = parseInt(testAttrs.errors   || '0', 10);
+            const skipped  = parseInt(testAttrs.skipped  || '0', 10);
+            const passed   = tests - failures - errors - skipped;
+            const duration = parseFloat(testAttrs.time   || '0').toFixed(2);
+            const conclusion = failures > 0 || errors > 0 ? '❌' : '✅';
+
+            // 失敗テストケース一覧を抽出
+            const failedCases = [];
+            const failureRegex = /<testcase[^>]+name="([^"]*)"[^>]*>[\s\S]*?<(?:failure|error)[^>]*>/g;
+            let m;
+            while ((m = failureRegex.exec(xml)) !== null) {
+              failedCases.push(m[1]);
+            }
+
+            const lines = [
+              marker,
+              `## ${conclusion} Pytest テスト結果`,
+              '',
+              '| Status | Count |',
+              '|--------|------:|',
+              `| ✅ Passed  | ${passed} |`,
+              `| ❌ Failed  | ${failures} |`,
+              `| ⚠️ Errors  | ${errors} |`,
+              `| ⏭️ Skipped | ${skipped} |`,
+              `| ⏱️ Duration | ${duration}s |`,
+            ];
+
+            if (failedCases.length > 0) {
+              lines.push('', '### 失敗したテスト', '');
+              for (const name of failedCases) {
+                lines.push(`- \`${name}\``);
+              }
+            }
+
+            lines.push('', `_Workflow run: [#${context.runNumber}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})_`);
+
+            const body = lines.join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+
+            const existing = comments.find(
+              (c) => c.user?.type === 'Bot' && c.body?.includes(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            }
+
       # --- カバレッジを Job Summary に表示 ---
       - name: Coverage Summary
         if: always()
@@ -109,26 +204,29 @@ jobs:
           # テスト件数の集計
           if [ -f work/test-results.xml ]; then
             TESTS=$(python3 -c "
-          import xml.etree.ElementTree as ET
-          tree = ET.parse('work/test-results.xml')
-          root = tree.getroot()
-          ts = root.get('tests', '0')
-          fl = root.get('failures', '0')
-          er = root.get('errors', '0')
-          sk = root.get('skipped', '0')
-          tm = root.get('time', '0')
-          passed = int(ts) - int(fl) - int(er) - int(sk)
-          print(f'| :white_check_mark: Passed | {passed} |')
-          print(f'| :x: Failed | {fl} |')
-          print(f'| :warning: Errors | {er} |')
-          print(f'| :fast_forward: Skipped | {sk} |')
-          print(f'| :stopwatch: Time | {tm}s |')
-          ")
-            echo "### テスト" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Status | Count |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-            echo "$TESTS" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+              import xml.etree.ElementTree as ET
+              tree = ET.parse('work/test-results.xml')
+              root = tree.getroot()
+              ts = root.find('testsuite') if root.tag == 'testsuites' else root
+              fl = ts.get('failures', '0')
+              er = ts.get('errors', '0')
+              sk = ts.get('skipped', '0')
+              total = int(ts.get('tests', '0'))
+              tm = ts.get('time', '0')
+              passed = total - int(fl) - int(er) - int(sk)
+              print(f'| :white_check_mark: Passed | {passed} |')
+              print(f'| :x: Failed | {fl} |')
+              print(f'| :warning: Errors | {er} |')
+              print(f'| :fast_forward: Skipped | {sk} |')
+              print(f'| :stopwatch: Time | {tm}s |')
+              ")
+            {
+              echo "### テスト"
+              echo "| Status | Count |"
+              echo "|--------|-------|"
+              echo "$TESTS"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # カバレッジの集計
@@ -142,33 +240,35 @@ jobs:
           print(f'{pct:.1f}')
           ")
             echo "COVERAGE_PCT=${COV}" >> "$GITHUB_ENV"
-            echo "### カバレッジ" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
             # バッジ風表示
             if (( $(echo "$COV >= 80" | bc -l) )); then
-              echo ":green_circle: **${COV}%**" >> "$GITHUB_STEP_SUMMARY"
+              BADGE=":green_circle: **${COV}%**"
             elif (( $(echo "$COV >= 60" | bc -l) )); then
-              echo ":yellow_circle: **${COV}%**" >> "$GITHUB_STEP_SUMMARY"
+              BADGE=":yellow_circle: **${COV}%**"
             else
-              echo ":red_circle: **${COV}%**" >> "$GITHUB_STEP_SUMMARY"
+              BADGE=":red_circle: **${COV}%**"
             fi
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-
-            # モジュール別カバレッジテーブル
-            echo "| Module | Stmts | Miss | Cover |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|--------|-------|------|-------|" >> "$GITHUB_STEP_SUMMARY"
-            python3 -c "
-          import xml.etree.ElementTree as ET
-          tree = ET.parse('work/coverage.xml')
-          for pkg in tree.findall('.//package'):
-            for cls in pkg.findall('.//class'):
-              name = cls.get('filename', '')
-              lr = float(cls.get('line-rate', '0')) * 100
-              lines = cls.findall('.//line')
-              total = len(lines)
-              miss = sum(1 for l in lines if l.get('hits') == '0')
-              print(f'| \`{name}\` | {total} | {miss} | {lr:.0f}% |')
-          " >> "$GITHUB_STEP_SUMMARY"
+            MODULE_TABLE=$(python3 -c "
+              import xml.etree.ElementTree as ET
+              tree = ET.parse('work/coverage.xml')
+              for pkg in tree.findall('.//package'):
+                for cls in pkg.findall('.//class'):
+                  name = cls.get('filename', '')
+                  lr = float(cls.get('line-rate', '0')) * 100
+                  lines = cls.findall('.//line')
+                  total = len(lines)
+                  miss = sum(1 for l in lines if l.get('hits') == '0')
+                  print(f'| \`{name}\` | {total} | {miss} | {lr:.0f}% |')
+              ")
+            {
+              echo "### カバレッジ"
+              echo ""
+              echo "$BADGE"
+              echo ""
+              echo "| Module | Stmts | Miss | Cover |"
+              echo "|--------|-------|------|-------|"
+              echo "$MODULE_TABLE"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # --- PR にカバレッジコメントを投稿 ---
@@ -188,7 +288,7 @@ jobs:
 
               return Object.fromEntries(
                 Array.from(
-                  tagMatch[1].matchAll(/([\\w:-]+)="([^"]*)"/g),
+                  tagMatch[1].matchAll(/([\w:-]+)="([^"]*)"/g),
                   ([, key, value]) => [key, value],
                 ),
               );
@@ -208,9 +308,7 @@ jobs:
             // Parse test-results.xml
             if (fs.existsSync('work/test-results.xml')) {
               const testXml = fs.readFileSync('work/test-results.xml', 'utf8');
-              const testsuiteAttrs = extractAttributes(testXml, 'testsuites');
-              const fallbackAttrs = extractAttributes(testXml, 'testsuite');
-              const testAttrs = Object.keys(testsuiteAttrs).length > 0 ? testsuiteAttrs : fallbackAttrs;
+              const testAttrs = extractAttributes(testXml, 'testsuite');
               const ts = testAttrs.tests || '0';
               const fl = testAttrs.failures || '0';
               const er = testAttrs.errors || '0';
@@ -230,7 +328,7 @@ jobs:
               `_Workflow run: ${context.runNumber}_`,
             ].join('\n');
 
-            const { data: comments } = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
