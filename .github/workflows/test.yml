@@ -39,12 +39,65 @@ jobs:
       # --- テスト結果を Checks タブに表示 ---
       - name: Test Report
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: actions/github-script@v7
         with:
-          name: "Pytest Results"
-          path: work/test-results.xml
-          reporter: java-junit
-          fail-on-error: false
+          script: |
+            const fs = require('fs');
+
+            const extractAttributes = (xml, tagName) => {
+              const tagMatch = xml.match(new RegExp(`<${tagName}\\b([^>]*)>`, 'i'));
+              if (!tagMatch) {
+                return {};
+              }
+
+              return Object.fromEntries(
+                Array.from(
+                  tagMatch[1].matchAll(/([\\w:-]+)="([^"]*)"/g),
+                  ([, key, value]) => [key, value],
+                ),
+              );
+            };
+
+            const testReportPath = 'work/test-results.xml';
+            if (!fs.existsSync(testReportPath)) {
+              core.warning(`Test report not found: ${testReportPath}`);
+              return;
+            }
+
+            const xml = fs.readFileSync(testReportPath, 'utf8');
+            const testsuitesAttrs = extractAttributes(xml, 'testsuites');
+            const testsuiteAttrs = extractAttributes(xml, 'testsuite');
+            const testAttrs = Object.keys(testsuitesAttrs).length > 0 ? testsuitesAttrs : testsuiteAttrs;
+
+            const tests = Number.parseInt(testAttrs.tests || '0', 10);
+            const failures = Number.parseInt(testAttrs.failures || '0', 10);
+            const errors = Number.parseInt(testAttrs.errors || '0', 10);
+            const skipped = Number.parseInt(testAttrs.skipped || '0', 10);
+            const passed = tests - failures - errors - skipped;
+            const duration = testAttrs.time || '0';
+            const conclusion = failures > 0 || errors > 0 ? 'failure' : 'success';
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Pytest Results',
+              head_sha: context.payload.pull_request?.head?.sha || context.sha,
+              status: 'completed',
+              conclusion,
+              output: {
+                title: 'Pytest Results',
+                summary: [
+                  '## Pytest Results',
+                  '',
+                  `- Passed: ${passed}`,
+                  `- Failed: ${failures}`,
+                  `- Errors: ${errors}`,
+                  `- Skipped: ${skipped}`,
+                  `- Duration: ${duration}s`,
+                ].join('\n'),
+                text: `Source: \`${testReportPath}\``,
+              },
+            });
 
       # --- カバレッジを Job Summary に表示 ---
       - name: Coverage Summary
@@ -125,6 +178,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const marker = '<!-- vehicle-log-system:test-report -->';
 
             const extractAttributes = (xml, tagName) => {
               const tagMatch = xml.match(new RegExp(`<${tagName}\\b([^>]*)>`, 'i'));
@@ -161,18 +215,47 @@ jobs:
               const fl = testAttrs.failures || '0';
               const er = testAttrs.errors || '0';
               const sk = testAttrs.skipped || '0';
-              const passed = parseInt(ts) - parseInt(fl) - parseInt(er) - parseInt(sk);
+              const passed = parseInt(ts, 10) - parseInt(fl, 10) - parseInt(er, 10) - parseInt(sk, 10);
               testSummary = `✅ Passed: ${passed} | ❌ Failed: ${fl} | ⚠️ Errors: ${er} | ⏭️ Skipped: ${sk}`;
             }
             
-            const comment = `## 📊 テストカバレッジレポート\n\n${testSummary}\n\n**カバレッジ**: ${coverage}%`;
-            
-            await github.rest.issues.createComment({
+            const comment = [
+              marker,
+              '## 📊 テストカバレッジレポート',
+              '',
+              testSummary || 'テスト結果が利用できません。',
+              '',
+              `**カバレッジ**: ${coverage}%`,
+              '',
+              `_Workflow run: ${context.runNumber}_`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: comment
+              per_page: 100,
             });
+
+            const existingComment = comments.find((entry) =>
+              entry.user?.type === 'Bot' && entry.body?.includes(marker),
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: comment,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment,
+              });
+            }
 
       # --- カバレッジバッジを gist に保存 ---
       - name: Update coverage badge
