@@ -128,8 +128,9 @@ try:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 4096,
+        "max_tokens": 4096,  # GitHub Models API の上限に合わせた設定
         "temperature": 0.3,
+
     }
 
     request_body = json.dumps(payload).encode("utf-8")

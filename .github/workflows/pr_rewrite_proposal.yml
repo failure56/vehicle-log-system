@@ -66,8 +66,8 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_ENV"
 
-          # 差分内容（80,000文字で切り詰め: gpt-4.1-mini は 1M トークン対応）
-          DIFF=$(gh pr diff ${{ github.event.pull_request.number }} 2>/dev/null | head -c 80000 || echo "")
+          # 差分内容（12,000文字で切り詰め: GitHub Models API の 8000 トークン上限に合わせた設定）
+          DIFF=$(gh pr diff ${{ github.event.pull_request.number }} 2>/dev/null | head -c 12000 || echo "")
           {
             echo "PR_DIFF<<EOF"
             echo "$DIFF"
