@@ -57,39 +57,42 @@ system_prompt = """\
 ## 未決事項
 """
 
-# GitHub Models API エンドポイント（gpt-4o-mini: Premium 0.25回消費）
-url = "https://models.inference.ai.azure.com/chat/completions"
-headers = {
-    "Authorization": f"Bearer {token}",
-    "Content-Type": "application/json",
-}
-data = json.dumps({
-    "model": "gpt-4o-mini",
-    "messages": [
-        {
-            "role": "system",
-            "content": system_prompt,
-        },
-        {
-            "role": "user",
-            "content": prompt,
-        },
-    ],
-    "max_tokens": 4096,
-    "temperature": 0.3,
-}).encode("utf-8")
-
-req = urllib.request.Request(url, data=data, headers=headers)
-
 try:
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
+    # GitHub Models API endpoint for chat completions
+    api_url = "https://models.inference.ai.azure.com/chat/completions"
 
-    if not result.get("choices"):
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+    }
+
+    request_body = json.dumps(payload).encode("utf-8")
+
+    request = urllib.request.Request(
+        api_url,
+        data=request_body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2023-07-01",
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(request) as response:
+        response_text = response.read().decode("utf-8")
+
+    data = json.loads(response_text)
+
+    choices = data.get("choices") or []
+    if not choices:
         print("Error: GitHub Models API returned no response choices", file=sys.stderr)
         sys.exit(1)
 
-    print(result["choices"][0]["message"]["content"])
+    print(choices[0]["message"]["content"])
 except urllib.error.HTTPError as e:
     body = e.read().decode("utf-8")
     print(f"Error calling GitHub Models API ({e.code}): {body}", file=sys.stderr)

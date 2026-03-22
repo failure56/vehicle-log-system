@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -115,40 +116,42 @@ system_prompt = f"""\
 ## 未決事項
 """
 
-# GitHub Models API エンドポイント
-url = "https://models.inference.ai.azure.com/chat/completions"
-headers = {
-    "Authorization": f"Bearer {token}",
-    "Content-Type": "application/json",
-}
-data = json.dumps({
-    "model": "gpt-4.1-mini",
-    "messages": [
-        {
-            "role": "system",
-            "content": system_prompt,
-        },
-        {
-            "role": "user",
-            "content": prompt,
-        },
-    ],
-    "max_tokens": 4096,
-    "temperature": 0.3,
-}).encode("utf-8")
-
-req = urllib.request.Request(url, data=data, headers=headers)
-
 try:
-    # ネットワーク不調時にハングしないよう、明示的にタイムアウトを指定
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
+    # Prepare request payload for GitHub Models API (OpenAI-compatible)
+    payload = {
+        "model": "gpt-4.1-mini",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": 4096,
+        "temperature": 0.3,
+    }
 
-    if not result.get("choices"):
+    request_body = json.dumps(payload).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://models.inference.ai.azure.com/chat/completions",
+        data=request_body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(req) as response:
+        response_text = response.read().decode("utf-8")
+
+    res = json.loads(response_text)
+
+    choices = res.get("choices") or []
+    if not choices:
         print("Error: GitHub Models API returned no response choices", file=sys.stderr)
         sys.exit(1)
 
-    print(result["choices"][0]["message"]["content"])
+    print(choices[0]["message"]["content"])
 except urllib.error.HTTPError as e:
     body = e.read().decode("utf-8")
     print(f"Error calling GitHub Models API ({e.code}): {body}", file=sys.stderr)
