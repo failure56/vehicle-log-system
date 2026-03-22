@@ -29,6 +29,22 @@ pr_diff = os.environ.get("PR_DIFF", "")
 pr_files = os.environ.get("PR_FILES", "")
 pr_commits = os.environ.get("PR_COMMITS", "")
 
+# PR_BODY からテスト結果マーカー区間を分離（AI に送らず、出力末尾に再付加する）
+_TEST_START = "<!-- vehicle-log-system:test-report:start -->"
+_TEST_END   = "<!-- vehicle-log-system:test-report:end -->"
+_test_section_suffix = ""
+if _TEST_START in pr_body and _TEST_END in pr_body:
+    _s = pr_body.index(_TEST_START)
+    _e = pr_body.index(_TEST_END) + len(_TEST_END)
+    _test_section_suffix = "\n\n---\n\n" + pr_body[_s:_e]
+    pr_body = pr_body[:_s].rstrip()  # マーカー区間を除去してから AI に渡す
+else:
+    _test_section_suffix = (
+        f"\n\n---\n\n{_TEST_START}\n"
+        "> ⏳ テスト結果はCIが完了すると自動で更新されます\n"
+        f"{_TEST_END}"
+    )
+
 if not token:
     print("Error: GITHUB_TOKEN environment variable is not set", file=sys.stderr)
     sys.exit(1)
@@ -157,7 +173,7 @@ try:
         print("Error: GitHub Models API returned no response choices", file=sys.stderr)
         sys.exit(1)
 
-    print(choices[0]["message"]["content"])
+    print(choices[0]["message"]["content"] + _test_section_suffix)
 except urllib.error.HTTPError as e:
     body = e.read().decode("utf-8")
     print(f"Error calling GitHub Models API ({e.code}): {body}", file=sys.stderr)

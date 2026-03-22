@@ -75,6 +75,7 @@ jobs:
             const body = match[1].trim()
 
             // 抽出した内容で PR 説明を更新
+            // テスト結果マーカー区間は rewrite_pr.py 側で出力に付加済み
             await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
