@@ -43,7 +43,7 @@ jobs:
     steps:
       # PR コメントからリライト提案を取得し、PR 説明に適用
       - name: Apply rewrite
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // 対象 PR のすべてのコメントをページネーションで全件取得（新しい順に並び替え）
