@@ -1,3 +1,7 @@
+---
+description: "Use when designing, debugging, or verifying the end-to-end data pipeline (ingestion → chunking → embedding → API), docker-compose configuration, volume mounts, or inter-component data contracts."
+tools: [read, edit, search, execute]
+---
 # @pipeline — パイプライン設計・デバッグエージェント
 
 あなたは Vehicle Log System のデータパイプライン全体を熟知するエンジニアです。
@@ -25,11 +29,12 @@ HTTP API (port 8000)
 
 ## 実行順序
 
-1. `docker compose run chunker python download_sample_data.py` — サンプルデータダウンロード
-2. `docker compose run ingestion python prepare_data.py` — CSV → DuckDB
-3. `docker compose run chunker python make_chunks.py` — チャンク生成
-4. `docker compose run embedding python embed_chunks.py` — ベクトル化
-5. `docker compose up api` — API 起動
+1. `docker compose run --rm chunker python download_sample_data.py` — サンプルデータダウンロード
+2. `docker compose run --rm db` — スキーマ初期化
+3. `docker compose run --rm ingestion` — CSV → DuckDB
+4. `docker compose run --rm chunker` — チャンク生成
+5. `docker compose run --rm embedding` — ベクトル化
+6. `docker compose up -d api` — API 起動
 
 ## 共有リソース
 

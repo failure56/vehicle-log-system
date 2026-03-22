@@ -1,3 +1,6 @@
+---
+description: "Use when writing commit messages. Follows Conventional Commits format (feat/fix/docs/test/ci/refactor/chore). Japanese subject OK, 50 chars max. Scoped to component names: ingestion, chunking, embedding, db, api."
+---
 # コミットメッセージ指示
 
 ## フォーマット

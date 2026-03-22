@@ -10,7 +10,6 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
-  issues: write
 
 jobs:
   # -----------------------------------------------------------------
@@ -113,6 +112,7 @@ jobs:
             } catch (error) {
               core.warning(`Failed to create GitHub Check for pytest results: ${error.message || error}`);
             }
+
       # --- カバレッジを Job Summary に表示 ---
       - name: Coverage Summary
         if: always()
@@ -190,20 +190,18 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # --- PR にテスト結果・カバレッジコメントを投稿 ---
+      # --- PR本文のマーカー区間にテスト結果を反映（フォールバック: コメント投稿） ---
       - name: Test & Coverage PR Comment
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
-            const marker = '<!-- vehicle-log-system:test-report -->';
+            const COMMENT_MARKER = '<!-- vehicle-log-system:test-report -->';
 
             const extractAttributes = (xml, tagName) => {
               const tagMatch = xml.match(new RegExp(`<${tagName}\\b([^>]*)>`, 'i'));
-              if (!tagMatch) {
-                return {};
-              }
+              if (!tagMatch) return {};
               return Object.fromEntries(
                 Array.from(
                   tagMatch[1].matchAll(/([\w:-]+)="([^"]*)"/g),
@@ -212,7 +210,8 @@ jobs:
               );
             };
 
-            const lines = [marker, '## 📋 テスト結果 & カバレッジ', ''];
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const lines = [];
 
             // --- テスト結果の集計 ---
             if (fs.existsSync('work/test-results.xml')) {
@@ -225,7 +224,6 @@ jobs:
               const passed   = tests - failures - errors - skipped;
               const duration = parseFloat(testAttrs.time   || '0').toFixed(2);
               const icon     = failures > 0 || errors > 0 ? '❌' : '✅';
-
               lines.push(
                 `### ${icon} テスト結果`,
                 '',
@@ -245,49 +243,43 @@ jobs:
               const rate = parseFloat(coverageAttrs['line-rate'] || '0') * 100;
               const pct = rate.toFixed(1);
               const badge = rate >= 80 ? '🟢' : rate >= 60 ? '🟡' : '🔴';
-
-              lines.push(
-                `### ${badge} カバレッジ: ${pct}%`,
-                '',
-              );
+              lines.push(`### ${badge} カバレッジ: ${pct}%`, '');
             } else {
               lines.push('### カバレッジ', '', 'カバレッジ情報が利用できません。', '');
             }
 
-            lines.push(`_Workflow run: [#${context.runNumber}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})_`);
-
-            const body = lines.join('\n');
+            lines.push(`_Workflow run: [#${context.runNumber}](${runUrl})_`);
+            const reportBody = lines.join('\n');
 
             try {
+              const commentBody = `${COMMENT_MARKER}\n## 📋 テスト結果 & カバレッジ\n\n${reportBody}`;
               const comments = await github.paginate(github.rest.issues.listComments, {
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 per_page: 100,
               });
-
-              const existingComment = comments.find((entry) =>
-                entry.user?.type === 'Bot' && entry.body?.includes(marker),
+              const existingComment = comments.find(
+                (c) => c.user?.type === 'Bot' && c.body?.includes(COMMENT_MARKER),
               );
-
               if (existingComment) {
                 await github.rest.issues.updateComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   comment_id: existingComment.id,
-                  body,
+                  body: commentBody,
                 });
               } else {
                 await github.rest.issues.createComment({
                   issue_number: context.issue.number,
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  body,
+                  body: commentBody,
                 });
               }
             } catch (err) {
               // fork PRなど書き込み権限がない場合は警告のみ（jobは失敗させない）
-              core.warning(`PR comment skipped: ${err.message}`);
+              core.warning(`PR test report update skipped: ${err.message}`);
             }
 
       # --- カバレッジバッジを gist に保存 ---

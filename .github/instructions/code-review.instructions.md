@@ -1,3 +1,6 @@
+---
+description: "Use when reviewing Python code in this project. Checks DuckDB read_only setting, SQL injection via parameter binding, Parquet I/O patterns, DuckDB connection close (with/try-finally), Docker volume path consistency, type hints, FastAPI HTTPException usage."
+---
 # コードレビュー指示
 
 ## チェック観点
