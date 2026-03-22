@@ -1,4 +1,8 @@
- テスト生成指示
+---
+description: "Use when writing pytest tests for this project. DuckDB tests use :memory: connection. Test function naming: test_<func>_<condition>. Parquet tests use tmp_path fixture. Document test intent in Japanese docstrings. Cover normal, error, and boundary cases."
+applyTo: "tests/**"
+---
+# テスト生成指示
 
 ## ルール
 

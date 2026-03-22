@@ -69,9 +69,27 @@ vehicle-log-system/
 │   ├── chunks/             # チャンク済み Parquet
 │   ├── db/                 # DuckDB ファイル
 │   └── sample/             # サンプル入力データ
-├── .github/workflows/      # CI/CD
-│   ├── test.yml            # テスト + ビルド検証
-│   └── e2e-pipeline.yml    # E2E パイプライン
+├── .github/
+│   ├── copilot-instructions.md      # Copilot 共通指示（このファイル）
+│   ├── instructions/                # タスク別指示ファイル
+│   │   ├── code-review.instructions.md
+│   │   ├── commit-message.instructions.md
+│   │   └── test-generation.instructions.md
+│   ├── agents/                      # カスタムエージェント定義
+│   │   ├── data-engineer.agent.md
+│   │   ├── issue-ops.agent.md
+│   │   ├── pipeline.agent.md
+│   │   └── vehicle-api.agent.md
+│   └── workflows/                   # CI/CD ワークフロー
+│       ├── test.yml
+│       ├── e2e-pipeline.yml
+│       ├── issue_rewrite_proposal.yml
+│       ├── issue_rewrite_apply.yml
+│       ├── pr_rewrite_proposal.yml
+│       └── pr_rewrite_apply.yml
+├── scripts/                         # AI リライトスクリプト
+│   ├── rewrite_issue.py
+│   └── rewrite_pr.py
 ├── docker-compose.yml
 ├── pyproject.toml
 └── README.md
@@ -135,7 +153,7 @@ docker compose build
 
 ### 新しいデータ処理モジュールの追加
 
-1. 新しいディレクトリを作成（例: `embedding/`）
+1. 新しいディレクトリを作成（例: `new-module/`）
 2. 既存パターンに従って Dockerfile を追加
 3. エントリーポイントとなる Python スクリプトを作成
 4. `docker-compose.yml` にサービスを追加
@@ -150,12 +168,8 @@ docker compose build
 
 ## レビュー時の追加観点
 
-コードレビューを依頼された場合は、以下も確認すること:
-
-- SQL インジェクションのリスクがないか（パラメータバインド使用）
-- 深刻度を 🔴 Critical / 🟡 Warning / 🔵 Info で表示
-- DuckDB 接続の `read_only` 設定が適切か
-- Docker ボリュームマウントのパス整合性
+コードレビュー時は `.github/instructions/code-review.instructions.md` の観点を適用すること。
+深刻度は 🔴 Critical / 🟡 Warning / 🔵 Info で表示し、各指摘に該当箇所と修正案を記載する。
 
 ## セキュリティ
 
@@ -170,3 +184,39 @@ docker compose build
 - FFT ベースの周波数特徴量
 - 走行シーン分類
 - Web UI ダッシュボード
+
+---
+
+<!-- ai-context:start -->
+## PR レビュー用プロジェクトコンテキスト（AI Scripts 向け）
+
+このリポジトリは車載データパイプラインです。以下の知識を PR 差分の解釈に活用してください。
+
+### コンポーネントとディレクトリの対応
+- `ingestion/`             → CSV → DuckDB への取り込み処理
+- `chunking/`              → 60秒時間窓でのチャンク分割・特徴量抽出
+- `embedding/`             → sentence-transformers によるベクトル化
+- `api/`                   → FastAPI サーバー（検索・クエリ）
+- `db/`                    → DuckDB スキーマ初期化
+- `scripts/`               → AI リライトスクリプト（Issue / PR 自動化）
+- `.github/workflows/`     → CI/CD ワークフロー定義
+- `.github/instructions/`  → Copilot タスク別指示ファイル（通常、機能変更ではない）
+- `.github/agents/`        → Copilot カスタムエージェント定義（通常、機能変更ではない）
+- `tests/`                 → pytest テストスイート
+- `data/`                  → データ格納ディレクトリ（通常コミットされない）
+
+### ブランチ命名規則
+- `feature/XXX`  → 新機能追加
+- `bugfix/XXX`   → バグ修正
+- `hotfix/XXX`   → 緊急修正
+
+### ファイルパターン別の変更意図
+- `.github/workflows/*.yml`   → CI/CD の変更（機能変更ではない）
+- `.github/instructions/*.md` → Copilot 指示の変更（機能変更ではない）
+- `.github/agents/*.md`       → Copilot エージェント定義の変更（機能変更ではない）
+- `tests/test_*.py`           → テスト追加・修正
+- `scripts/*.py`              → AI リライトスクリプトの変更
+- `data/` 配下のファイル      → 通常コミットされないため誤コミットの疑いあり（「不要な変更の指摘」に記載）
+- `pyproject.toml`            → 依存関係・パッケージ設定の変更
+- `docker-compose.yml`        → コンテナ構成の変更
+<!-- ai-context:end -->
