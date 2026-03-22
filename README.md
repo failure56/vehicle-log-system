@@ -41,6 +41,9 @@ vehicle-log-system/
 ├── db/                     # DuckDB スキーマ初期化
 │   ├── Dockerfile
 │   └── run_duckdb.py
+├── doc/                    # ドキュメント
+│   ├── data-flow.md        # データフロー図
+│   └── architecture.md     # アーキテクチャ設計
 ├── embedding/              # ベクトル化処理
 │   ├── Dockerfile
 │   └── embed_chunks.py
@@ -67,6 +70,16 @@ vehicle-log-system/
 ├── docker-compose.yml
 └── README.md
 ```
+
+---
+
+## 📖 ドキュメント
+
+詳細なシステム設計とデータフローについては、以下のドキュメントを参照してください：
+
+- **[データフロー図](./doc/data-flow.md)** - システム全体の処理フローと各ステージの詳細
+- **[システムアーキテクチャ](./doc/architecture.md)** - 技術スタック、コンポーネント設計、セキュリティ考慮事項
+- **[ドキュメント目次](./doc/README.md)** - 全ドキュメントの一覧
 
 ---
 
