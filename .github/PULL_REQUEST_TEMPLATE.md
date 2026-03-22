@@ -30,8 +30,3 @@
 
 <!-- 未解決の問題・今後の課題があれば記載してください -->
 
----
-
-<!-- vehicle-log-system:test-report:start -->
-> ⏳ テスト結果はCIが完了すると自動で更新されます
-<!-- vehicle-log-system:test-report:end -->

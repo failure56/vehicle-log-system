@@ -197,8 +197,6 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const START_MARKER   = '<!-- vehicle-log-system:test-report:start -->';
-            const END_MARKER     = '<!-- vehicle-log-system:test-report:end -->';
             const COMMENT_MARKER = '<!-- vehicle-log-system:test-report -->';
 
             const extractAttributes = (xml, tagName) => {
@@ -254,31 +252,6 @@ jobs:
             const reportBody = lines.join('\n');
 
             try {
-              // PR本文にマーカーがある場合（PRテンプレート使用時）は本文を直接更新
-              const pr = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.issue.number,
-              });
-              const prBody = pr.data.body || '';
-
-              if (prBody.includes(START_MARKER) && prBody.includes(END_MARKER)) {
-                const newSection = `${START_MARKER}\n${reportBody}\n${END_MARKER}`;
-                const updated = prBody.replace(
-                  new RegExp(`${START_MARKER}[\\s\\S]*?${END_MARKER}`),
-                  newSection,
-                );
-                await github.rest.pulls.update({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: context.issue.number,
-                  body: updated,
-                });
-                core.info('Updated test report in PR body.');
-                return;
-              }
-
-              // フォールバック: PRテンプレート未使用の場合はコメントとして投稿
               const commentBody = `${COMMENT_MARKER}\n## 📋 テスト結果 & カバレッジ\n\n${reportBody}`;
               const comments = await github.paginate(github.rest.issues.listComments, {
                 issue_number: context.issue.number,
