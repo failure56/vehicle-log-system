@@ -15,6 +15,10 @@ Vehicle Log System は以下の処理を段階的に行います：
 1. **Ingestion**  
    生データ（CSV / テレメトリ / CAN / GPS）を DuckDB にロード。
 
+
+
+出出出て
+
 2. **Chunking**  
    60秒ごとに時間窓で分割し、  
    GPS + CAN のチャンク単位の特徴量を抽出。
