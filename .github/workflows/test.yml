@@ -123,8 +123,6 @@ jobs:
       run: |
         API_READY=0
         for i in {1..10}; do
-        API_READY=0
-        for i in {1..10}; do
           if curl -sSf http://localhost:8000/chunks > /dev/null; then
             echo "API is ready"
             API_READY=1
@@ -133,11 +131,6 @@ jobs:
           echo "Waiting for API... ($i/10)"
           sleep 3
         done
-        if [ "$API_READY" -ne 1 ]; then
-          echo "ERROR: API did not become ready after 10 attempts"
-          exit 1
-        fi
-        # APIが起動しなかった場合は明示的にエラーで終了
         if [ "$API_READY" -ne 1 ]; then
           echo "ERROR: API did not become ready after 10 attempts"
           exit 1
